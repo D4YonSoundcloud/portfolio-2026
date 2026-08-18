@@ -1,0 +1,99 @@
+/**
+ * §5 — the track is the only thing that moves. The viewport is pinned and never scrolls.
+ */
+
+.viewport {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-content);
+  overflow: hidden;
+  /* The gesture handler calls preventDefault itself (§5.1); this stops the browser
+   * starting a native pan before the handler has decided (§8.2). */
+  touch-action: none;
+}
+
+/*
+ * §7.1 — the gradient scrim, hoisted to the viewport.
+ *
+ * This USED to be `.item::before { inset: -10% }`. That was a bug: an absolutely
+ * positioned element with a negative `bottom` inside an `overflow-y: auto` container
+ * extends that container's scrollable region. Every item therefore carried ~10% of
+ * viewport height in phantom scroll — so a wheel gesture spent its first ~80px
+ * scrolling empty scrim before the escape hatch would hand off to a section change.
+ *
+ * Living on the viewport instead, it cannot contribute overflow to anything (the
+ * viewport is `overflow: hidden`), it does not scroll away from the text it sits
+ * behind, and it is one paint layer rather than five.
+ */
+.viewport::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+.viewport[data-axis='x'] .track {
+  flex-direction: row;
+}
+
+.viewport[data-axis='y'] .track {
+  flex-direction: column;
+}
+
+.item {
+  position: relative;
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  justify-items: center;
+  /*
+   * `safe center` rather than plain `center`. When a grid child is taller than its
+   * container, true centring overflows it equally in both directions — and the top
+   * overflow of a scroll container is unreachable, so the first lines of a long section
+   * would be permanently clipped. `safe` falls back to start-alignment exactly in that
+   * case, and centres normally otherwise.
+   */
+  align-content: safe center;
+
+  /*
+   * §5.1 escape hatch — an item genuinely taller than the viewport scrolls its own
+   * content first. `overflow-y: auto` is what `findScrollableAncestor` looks for, and
+   * `auto` means an item that FITS has no scrollable range at all: the hatch reports no
+   * scrollable ancestor and the gesture advances the carousel immediately, with no
+   * travel first. That only holds if nothing inside manufactures overflow — see the
+   * scrim note above.
+   */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+
+  /*
+   * Scrollbars hidden throughout. The page has no document scroll to indicate, and a
+   * gutter appearing on one section but not another reads as a layout jump on a fixed
+   * viewport.
+   *
+   * Trade-off worth knowing: this removes the only passive cue that an item has more
+   * content below. The escape hatch still works, but nothing advertises it. If a
+   * section routinely overflows, give it an explicit affordance rather than restoring
+   * the bar.
+   */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.item::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

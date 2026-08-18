@@ -1,0 +1,47 @@
+/* §3 — fixed, full-viewport background layer beneath the content (z-index: 0). */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-canvas);
+  pointer-events: none;
+}
+
+/* The meshes need pointer events for hover/click (§4.6); the layer itself does not. */
+.layer canvas {
+  pointer-events: auto;
+}
+
+.canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.poster {
+  position: absolute;
+  inset: 0;
+  opacity: 1;
+  transition: opacity 600ms var(--ease-out);
+}
+
+/* Crossfade to the live scene once it's mounted (§4.7). */
+.layer[data-live] .poster {
+  opacity: 0;
+}
+
+.poster svg {
+  width: 100%;
+  height: 100%;
+}
+
+.posterEdges path {
+  fill: none;
+  stroke: var(--cat-import);
+  stroke-width: 1;
+  opacity: calc(var(--scene-edge-opacity) * 2.4);
+}
+
+.posterNodes circle {
+  fill: var(--cat-declaration);
+  opacity: 0.5;
+}

@@ -1,0 +1,61 @@
+.heading {
+  font-size: var(--step-1);
+  font-weight: 400;
+  color: var(--text-dim);
+  max-width: 48ch;
+}
+
+.email {
+  font-family: var(--font-label);
+  font-size: var(--step-3);
+  letter-spacing: -0.01em;
+  color: var(--text);
+  text-decoration: none;
+  width: fit-content;
+  border-bottom: 2px solid var(--rule-strong);
+  padding-bottom: var(--space-1);
+  transition: border-color var(--dur-fast) var(--ease-out);
+  word-break: break-all;
+}
+
+.email:hover {
+  border-color: var(--accent);
+}
+
+.note {
+  font-size: var(--step-0);
+  color: var(--text-faint);
+  max-width: 52ch;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  list-style: none;
+  padding: var(--space-4) 0 0;
+  margin: 0;
+  border-top: var(--rule-width) solid var(--rule);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  text-decoration: none;
+  min-height: 44px;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.link:hover {
+  color: var(--accent);
+}
+
+.arrow {
+  font-size: 0.9em;
+  color: var(--text-faint);
+}

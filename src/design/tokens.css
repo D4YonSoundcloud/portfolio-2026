@@ -1,0 +1,199 @@
+/**
+ * §7 — Visual Design System.
+ *
+ * Direction (§7.1): schematic/diagram. Closer to compiler diagnostics output or a PCB
+ * silkscreen than a game HUD. Precise, quiet, technical — not cyberpunk.
+ *
+ * §7.2 "one source of truth": these custom properties are read by the DOM layer directly
+ * and by `scene/palette.ts` (via getComputedStyle) for the R3F materials. There is no
+ * second palette maintained in TypeScript that could drift out of sync with this file.
+ */
+
+/* ── Typography ─────────────────────────────────────────────────────────────────────
+ * §7.1 — two monospace roles, not one.
+ *
+ * Departure Mono is bundled (public/fonts, OFL). Commit Mono and Inter are NOT bundled
+ * — see README "Fonts". The stacks below degrade to good system faces, so the site is
+ * correct without them and better with them.
+ */
+@font-face {
+  font-family: 'Departure Mono';
+  src: url('/fonts/DepartureMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Label/display mono — section labels, UI chrome. Used sparingly (§7.1). */
+  --font-label: 'Departure Mono', 'Martian Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Code-snippet mono — inside the Code Inspector only. Deliberately neutral (§7.1). */
+  --font-code: 'Commit Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /* Body — humanist sans. Monospace stays situational, never the default heading face. */
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
+
+  /* Type scale — 1.25 ratio, clamped so the fixed viewport never overflows (§5). */
+  --step--1: clamp(0.75rem, 0.72rem + 0.15vw, 0.82rem);
+  --step-0: clamp(0.94rem, 0.9rem + 0.2vw, 1rem);
+  --step-1: clamp(1.13rem, 1.05rem + 0.4vw, 1.35rem);
+  --step-2: clamp(1.4rem, 1.25rem + 0.75vw, 1.9rem);
+  --step-3: clamp(1.75rem, 1.45rem + 1.5vw, 2.85rem);
+  --step-4: clamp(2.1rem, 1.6rem + 2.6vw, 4.1rem);
+
+  --tracking-label: 0.14em;
+  --tracking-tight: -0.015em;
+  --leading-body: 1.62;
+  --leading-tight: 1.12;
+
+  /* Spacing — 4px base. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --measure: 67ch;
+  --radius: 2px; /* Schematic, not soft. */
+  --rule-width: 1px;
+
+  /* Motion — §5.2's spring config is in TS; these cover CSS-only micro-interactions. */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur-mid: 240ms;
+
+  --z-canvas: 0;
+  --z-content: 1;
+  --z-chrome: 2;
+  --z-inspector: 3;
+}
+
+/* ── Dark (default) ─────────────────────────────────────────────────────────────────
+ * §7.2 — "code at night." Near-black but not pure black, glowing/emissive AST nodes,
+ * bloom pass active.
+ */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0b0d10;
+  --bg-raised: #13161b;
+  --bg-sunken: #07090b;
+
+  --text: #e8e6e1;
+  --text-dim: #9c9a93;
+  --text-faint: #6a6862;
+
+  --rule: rgb(232 230 225 / 14%);
+  --rule-strong: rgb(232 230 225 / 28%);
+
+  --accent: #c6a24a;
+  --focus-ring: #9584c4;
+
+  /* Scrim behind text — a gradient, not an opaque panel (§7.1). */
+  --scrim-strength: 0.72;
+  --scrim: radial-gradient(
+    120% 100% at 50% 50%,
+    rgb(11 13 16 / var(--scrim-strength)) 0%,
+    rgb(11 13 16 / calc(var(--scrim-strength) * 0.82)) 45%,
+    rgb(11 13 16 / 0%) 100%
+  );
+
+  /* NodeCategory colours (§4.2, §7.1) — deliberately desaturated so the bloom pass
+   * doesn't turn the scene into a rave. Read by scene/palette.ts. */
+  --cat-declaration: #c6a24a;
+  --cat-controlflow: #5e9a94;
+  --cat-jsx: #9584c4;
+  --cat-import: #6f8399;
+  --cat-expression: #8a8477;
+  --cat-literal: #b0827e;
+
+  /* Scene render inputs (§4.4, §7.2) — dark theme glows. */
+  --scene-emissive: 0.85;
+  --scene-edge-opacity: 0.17;
+  --scene-node-scale: 1;
+  --scene-bg-fog: #0b0d10;
+
+  /* Frosted-glass node material. Low base alpha + strong Fresnel rim = translucent
+   * face-on, bright at grazing angles. Additive blending on dark, so overlapping
+   * nodes accumulate like caustics. */
+  --scene-glass-alpha: 0.16;
+  --scene-rim-strength: 0.85;
+  /* How far non-active nodes fade while something is hovered or selected. */
+  --scene-dim: 0.42;
+}
+
+/* ── Light ──────────────────────────────────────────────────────────────────────────
+ * §7.2 — a genuine second design, not inverted colours. Blueprint/schematic paper:
+ * pale paper ground, ink-dark text, AST rendered as fine technical linework rather than
+ * glowing points. Bloom is swapped for a subtle shadow/AO treatment (§4.4).
+ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #e8e6df;
+  --bg-raised: #f3f1ea;
+  --bg-sunken: #dcd9d1;
+
+  --text: #191f27;
+  --text-dim: #55606e;
+  --text-faint: #808a97;
+
+  --rule: rgb(25 31 39 / 18%);
+  --rule-strong: rgb(25 31 39 / 34%);
+
+  --accent: #8a6a15;
+  --focus-ring: #4a3d78;
+
+  --scrim-strength: 0.74;
+  --scrim: radial-gradient(
+    120% 100% at 50% 50%,
+    rgb(232 230 223 / var(--scrim-strength)) 0%,
+    rgb(232 230 223 / calc(var(--scrim-strength) * 0.82)) 45%,
+    rgb(232 230 223 / 0%) 100%
+  );
+
+  /* Ink tones — these are stroke colours for linework, not glow colours. */
+  --cat-declaration: #8a6a15;
+  --cat-controlflow: #2f6660;
+  --cat-jsx: #5b4a8c;
+  --cat-import: #3d566e;
+  --cat-expression: #5c574c;
+  --cat-literal: #8a4f4a;
+
+  --scene-emissive: 0;
+  --scene-edge-opacity: 0.32;
+  --scene-node-scale: 0.72;
+  --scene-bg-fog: #e8e6df;
+
+  /* Light theme cannot glow, so the glass reads as etched acrylic on paper: higher
+   * base alpha, a quieter ink rim, normal blending. */
+  --scene-glass-alpha: 0.42;
+  --scene-rim-strength: 0.4;
+  --scene-dim: 0.3;
+}
+
+/* §8.1 — the scrim goes slightly stronger on mobile, where there's less margin between
+ * content and background. */
+@media (max-width: 767px) {
+  :root,
+  [data-theme='dark'],
+  [data-theme='light'] {
+    --scrim-strength: 0.86;
+  }
+}
+
+/* §4.7 / §9 — reduced motion is handled in JS via transitionMode: 'off', but CSS-only
+ * micro-interactions need their own guard. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-mid: 0ms;
+  }
+}

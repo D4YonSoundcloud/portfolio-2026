@@ -1,0 +1,106 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Lets you re-deploy without an empty commit — useful the first time you get the base
+  # path wrong (§10) and want to retry after fixing it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. `cancel-in-progress: false` on purpose: cancelling a
+# half-finished Pages deploy is a worse outcome than queueing behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Install
+        run: npm ci
+
+      # §11 — "The build job runs the same typecheck/lint/test/build steps as CI before
+      # handing the artifact to the deploy job, so a broken build never reaches Pages."
+      - name: Check AST source scope
+        run: npm run check:ast-scope
+
+      - name: Generate AST graph
+        run: npm run generate:ast
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      # §10 — THE base path. GitHub Pages serves a project repo at
+      # https://<user>.github.io/<repo>/, so Vite's `base` must be `/<repo>/`. For a
+      # custom domain (CNAME in public/) or a <user>.github.io user/org-page repo, it's
+      # `/` instead.
+      #
+      # `actions/configure-pages` resolves this for us and exposes it as `base_path`,
+      # which is more reliable than hardcoding the repo name — rename the repo and this
+      # keeps working. §10 calls this "the one config value that silently breaks every
+      # asset link if it's wrong", so it's derived, not typed by hand.
+      #
+      # If you set a custom domain, override with: BASE_PATH: /
+      - name: Build
+        run: npm run build
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+
+      # Sanity check before publishing: catches the base-path failure mode at build time
+      # rather than as a silently blank page on the live URL.
+      - name: Verify build output
+        run: |
+          test -f dist/index.html || { echo "::error::dist/index.html missing"; exit 1; }
+          test -f dist/ast-graph.json || { echo "::error::ast-graph.json missing from dist"; exit 1; }
+          test -f dist/snippets.json || { echo "::error::snippets.json missing from dist"; exit 1; }
+          # Structural, not content-based: greps for the carousel markup the prerender
+          # emits, so editing your own copy in content.ts never breaks this check.
+          grep -q 'aria-roledescription="slide"' dist/index.html \
+            || { echo "::error::Prerendered content missing from index.html (§10)"; exit 1; }
+          grep -q "<!--app-html-->" dist/index.html \
+            && { echo "::error::Prerender placeholder was never filled (§10)"; exit 1; }
+          echo "Build output verified."
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

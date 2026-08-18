@@ -1,0 +1,29 @@
+.statement {
+  font-size: var(--step-4);
+  max-width: 18ch;
+  letter-spacing: -0.025em;
+}
+
+.support {
+  font-size: var(--step-1);
+  color: var(--text-dim);
+  max-width: 46ch;
+}
+
+.meta {
+  display: flex;
+  gap: var(--space-3);
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-faint);
+}
+
+.caption {
+  font-size: var(--step--1);
+  line-height: 1.5;
+  color: var(--text-faint);
+  max-width: 44ch;
+  padding-left: var(--space-4);
+  border-left: var(--rule-width) solid var(--rule);
+}

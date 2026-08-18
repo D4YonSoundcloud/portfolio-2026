@@ -1,0 +1,115 @@
+.nav {
+  position: fixed;
+  z-index: var(--z-chrome);
+}
+
+.nav[data-orientation='vertical'] {
+  right: var(--space-5);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.nav[data-orientation='horizontal'] {
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.list {
+  display: flex;
+  gap: var(--space-1);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav[data-orientation='vertical'] .list {
+  flex-direction: column;
+}
+
+.nav[data-orientation='horizontal'] .list {
+  flex-direction: row;
+}
+
+.dot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* §8.1 — minimum ~44x44pt touch target. The tick is small; the hit area is not. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  justify-content: flex-end;
+}
+
+.nav[data-orientation='horizontal'] .dot {
+  justify-content: center;
+}
+
+.tick {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: var(--text-faint);
+  transition:
+    width var(--dur-mid) var(--ease-out),
+    background-color var(--dur-mid) var(--ease-out);
+}
+
+.dot:hover .tick {
+  background: var(--text-dim);
+}
+
+.dot[data-active] .tick {
+  width: 30px;
+  background: var(--accent);
+}
+
+/* The label is present for pointer users on hover and always for assistive tech.
+ * Hidden visually by default so the chrome stays quiet (§7.1). */
+.name {
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    opacity var(--dur-mid) var(--ease-out),
+    transform var(--dur-mid) var(--ease-out);
+  order: -1;
+}
+
+.dot:hover .name,
+.dot:focus-visible .name {
+  opacity: 1;
+  transform: none;
+}
+
+/* §8.1 — on narrow viewports the dot-nav moves to the bottom margin, respects the iOS
+ * safe area, and sits clear of the home-indicator gesture zone. */
+@media (max-width: 767px) {
+  .nav,
+  .nav[data-orientation='vertical'],
+  .nav[data-orientation='horizontal'] {
+    right: auto;
+    top: auto;
+    left: 50%;
+    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+  }
+
+  .nav .list {
+    flex-direction: row;
+  }
+
+  .dot {
+    justify-content: center;
+  }
+
+  /* Labels would collide at this width; the aria-label still carries the name. */
+  .name {
+    display: none;
+  }
+}

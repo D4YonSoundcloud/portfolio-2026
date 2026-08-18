@@ -1,0 +1,55 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: min(var(--measure), 100%);
+  /*
+   * Vertical padding kept tight on purpose. Centring is the item grid's job, so padding
+   * here buys nothing visually while counting toward the item's scroll height — and any
+   * overflow, real or manufactured, is travel the visitor has to scroll through before a
+   * gesture will advance the section (§5.1).
+   */
+  padding: var(--space-6) var(--space-6);
+}
+
+.shell[data-wide] {
+  width: min(78rem, 100%);
+}
+
+.viewSource {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) 0;
+  text-align: left;
+  border-top: var(--rule-width) solid var(--rule);
+  padding-top: var(--space-4);
+  width: fit-content;
+}
+
+.viewSourceLabel {
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.viewSource:hover .viewSourceLabel {
+  color: var(--accent);
+}
+
+.viewSourceHint {
+  font-size: var(--step--1);
+  color: var(--text-faint);
+}
+
+@media (max-width: 767px) {
+  .shell {
+    /* Bottom padding clears the dot-nav and the home indicator (§8.1). */
+    padding: var(--space-5) var(--space-4) calc(var(--space-7) + env(safe-area-inset-bottom, 0px));
+    gap: var(--space-4);
+  }
+}

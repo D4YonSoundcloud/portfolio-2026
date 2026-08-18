@@ -1,0 +1,167 @@
+@import '../design/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/**
+ * §5 — Fixed-viewport navigation. There is no document scroll: the page is pinned to the
+ * viewport at exactly its width and height. Focus items move; the page does not.
+ *
+ * `100dvh` matters on mobile specifically — `100vh` includes the collapsible browser
+ * chrome on iOS/Android, so a fixed layout using it gets clipped at the bottom.
+ */
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/*
+ * `position: fixed` on <body>, not just `overflow: hidden`.
+ *
+ * iOS Safari will still rubber-band and drag the whole page on a `overflow: hidden`
+ * body when a touch isn't consumed by a scrollable descendant. Taking the body out of
+ * flow removes the document scroll entirely, so there is nothing left to drag.
+ */
+body {
+  position: fixed;
+  inset: 0;
+}
+
+/*
+ * No document scrollbar, on any engine. There is no document scroll to indicate, and on
+ * a fixed layout a gutter appearing at all shifts the centred content sideways.
+ */
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--step-0);
+  line-height: var(--leading-body);
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--dur-mid) var(--ease-out);
+}
+
+/* Stops the whole page rubber-banding on iOS when a gesture isn't consumed (§8.2). */
+body {
+  touch-action: none;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 500;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--rule-strong);
+}
+
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* §9 — visible focus states throughout. Never removed, only shaped. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--radius);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* §7.1 structural device — section labels styled as real code comments. */
+.label {
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  text-transform: lowercase;
+  color: var(--text-faint);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* §9 — a keyboard user's first tab lands here, before any gesture-capture logic. */
+.skip-link {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 999;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-raised);
+  border: var(--rule-width) solid var(--rule-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}

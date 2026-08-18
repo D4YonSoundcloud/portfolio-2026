@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    A three-node AST fragment: the site's signature element (§7.1) reduced to what still
+    reads at 16px. Uses prefers-color-scheme directly rather than the theme token, since
+    a favicon renders outside the document and can't see CSS custom properties.
+  -->
+  <style>
+    .edge { stroke: #6f8399; stroke-width: 1.6; fill: none; }
+    .node { fill: #c6a24a; }
+    .root { fill: #9584c4; }
+    @media (prefers-color-scheme: light) {
+      .edge { stroke: #3d566e; }
+      .node { fill: #8a6a15; }
+      .root { fill: #5b4a8c; }
+    }
+  </style>
+  <rect width="32" height="32" fill="none" />
+  <path class="edge" d="M16 11 L9 22 M16 11 L23 22" />
+  <circle class="root" cx="16" cy="11" r="4" />
+  <circle class="node" cx="9" cy="22" r="3" />
+  <circle class="node" cx="23" cy="22" r="3" />
+</svg>

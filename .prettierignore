@@ -1,0 +1,7 @@
+dist
+dist-ssr
+public/ast-graph.json
+public/snippets.json
+playwright-report
+test-results
+package-lock.json

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>Rae Lindqvist — Software Engineer</title>
+    <meta
+      name="description"
+      content="Portfolio of Rae Lindqvist, a software engineer working on performance, build systems and data-heavy products. The background is a live 3D rendering of this site's own syntax tree."
+    />
+
+    <!--
+      §10 — Open Graph.
+
+      NOTE: og:image MUST be an absolute URL. Crawlers don't resolve relative paths, and
+      Vite's `base` rewriting (§10) applies to src/href attributes, NOT to meta content —
+      so this one reference will not be fixed for you by setting BASE_PATH. Replace both
+      URLs below with your deployed origin before shipping.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://example.github.io/portfolio/" />
+    <meta property="og:title" content="Rae Lindqvist — Software Engineer" />
+    <meta
+      property="og:description"
+      content="I make slow systems fast without rewriting them. The background of this site is its own syntax tree."
+    />
+    <meta property="og:image" content="https://example.github.io/portfolio/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!--
+      §7.2 — flash-of-wrong-theme guard.
+
+      Content is pre-rendered at build time (§10), so theme has to resolve synchronously
+      BEFORE first paint. This is a blocking inline script on purpose: waiting for React
+      to hydrate would flash the default theme first. Mirrors THEME_INIT_SCRIPT in
+      src/design/ThemeProvider.tsx — change both together.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('portfolio:themeMode');
+          var mode =
+            stored === 'dark' || stored === 'light' || stored === 'system' ? stored : 'system';
+          var resolved =
+            mode === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : mode;
+          document.documentElement.dataset.theme = resolved;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+
+    <!-- The label face is bundled and used above the fold, so it's worth preloading. -->
+    <link
+      rel="preload"
+      href="/fonts/DepartureMono-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+  </head>
+  <body>
+    <div id="root"><!--app-html--></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

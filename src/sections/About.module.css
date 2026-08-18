@@ -1,0 +1,44 @@
+.prose {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--step-1);
+  max-width: 52ch;
+}
+
+.prose p:first-child {
+  color: var(--text);
+}
+
+.prose p + p {
+  color: var(--text-dim);
+  font-size: var(--step-0);
+}
+
+.asides {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding-top: var(--space-4);
+  border-top: var(--rule-width) solid var(--rule);
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.key {
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-faint);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--step-0);
+  color: var(--text);
+}
