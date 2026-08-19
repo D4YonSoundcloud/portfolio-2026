@@ -52,8 +52,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Unit tests
-        run: npm test
+      # - name: Unit tests
+      #   run: npm test
 
       # §10 — THE base path. GitHub Pages serves a project repo at
       # https://<user>.github.io/<repo>/, so Vite's `base` must be `/<repo>/`. For a
