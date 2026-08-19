@@ -86,8 +86,8 @@ src/**/*.{ts,tsx}
 raw nodes  →  categorized, pruned to budget       §4.2  transform
    │  d3-force-3d, 300 ticks, fixed seed          §4.3  layout
    ▼
-public/ast-graph.json   (positions baked in)
-public/snippets.json    (Shiki, dual-theme CSS vars + alias map)
+public/ast-graph.json     (positions + character ranges baked in)
+public/source-index.json  (per-file text + numeric token stream)
    │  fetch + Zod validate
    ▼
 InstancedMesh per category + one LineSegments     §4.4  render
@@ -107,19 +107,38 @@ a waypoint.
 Regenerate manually with `npm run generate:ast`. The output is gitignored, so a stale
 graph can never ship.
 
-**Snippets are generated for structurally meaningful nodes only** (`SNIPPET_MAX_DEPTH`,
-currently depth ≤ 2, plus every file root). A parent's `loc` range already spans all its
-children's, so emitting one per node stored the same highlighted lines once per level of
-depth — that alone was a 7.8 MB artifact. Deeper nodes resolve upward through an alias
-map, which is also the better read: clicking a `StringLiteral` and getting the enclosing
-declaration beats getting the string. A unit test asserts every rendered node still
-resolves.
+**The inspector shows a character range, not a stored snippet.**
 
-Each snippet is **one** markup string carrying both themes as `--shiki-dark` /
-`--shiki-light` custom properties, so switching theme is a repaint rather than a re-fetch.
+Version 1 of the pipeline stored pre-highlighted HTML per node. That was redundant twice
+over — a parent's snippet already contains every one of its children's, so the same lines
+were highlighted once per level of depth, and every token carried its own
+`<span style="--shiki-light:…;--shiki-dark:…">` wrapper. It also forced a depth cutoff,
+below which nodes had no source of their own and aliased to an ancestor's.
 
-Current artifact sizes: `ast-graph.json` 860 KB (93 KB gzipped), `snippets.json` 3.5 MB
-(130 KB gzipped, fetched lazily on first inspector open — never at boot).
+Now each file's text is stored **once**, alongside a flat numeric token stream —
+`[offset, length, paletteIndex, …]` against a 31-entry palette. Every node carries
+absolute character offsets (`loc.start` / `loc.end`), so a node is just a range into its
+own file. Every node at every depth gets its own exact source; the depth cutoff and the
+alias map are both gone.
+
+| | raw | gzipped |
+|---|---|---|
+| v1 — HTML snippet per node | 4.02 MB | 149 KB |
+| v2 — token stream per file | **0.50 MB** | 186 KB |
+
+Note the honest trade: **transfer got slightly worse.** Gzip is very good at crushing
+repeated HTML, and numeric streams compress less well. The win is `JSON.parse` cost and
+memory on low-end devices — 8× less to parse on first inspector open — not bandwidth. If
+that ever inverts as a priority, the lever is dropping source text for files no visible
+node references.
+
+Two properties worth preserving if you touch this:
+
+- **Shiki token offsets are absolute** indices into the file, not per-line. The whole
+  design rests on it, so `sourceIndex.ts` round-trips the stream against the source and
+  fails the build if that ever changes, and a unit test asserts it against the artifact.
+- **Nothing goes through `dangerouslySetInnerHTML` any more.** The panel renders segments
+  as React elements, so escaping is the renderer's job rather than the build step's.
 
 ### The source-scope constraint
 
@@ -223,10 +242,9 @@ The scene is decorative. Every degradation path leaves the site fully usable.
 
 Current chunk sizes (gzipped): entry 81 KB, R3F 138 KB, Three.js 190 KB.
 
-`snippets.json` is still 3.5 MB uncompressed, which is a `JSON.parse` cost on a low-end
-phone the first time someone opens the inspector. It's lazy and one-time, but if it ever
-shows up in profiling, the next lever is lowering `SNIPPET_MAX_DEPTH` to 1 or splitting
-the file per source directory.
+`source-index.json` is 500 KB uncompressed and parsed once, on first inspector open. If
+it ever shows up in profiling, the next levers are omitting source text for files no
+visible node references, or splitting the index per source directory.
 
 ---
 
@@ -239,9 +257,11 @@ npm test              # Vitest — 23 tests
 npm run test:e2e      # Playwright (needs: npx playwright install chromium)
 ```
 
-Unit tests (25) cover store invariants, the `SyntaxKind` mapping, and validation of the
-generated artifacts — including that no file outside `src/` ever appears in the graph, and
-that every rendered node resolves to a snippet.
+Unit tests (61) cover store invariants, the `SyntaxKind` mapping, and validation of the
+generated artifacts — including that no file outside `src/` ever appears in the graph,
+that every node's character range lies inside its own file, and that Shiki's token
+offsets still index the source correctly. `renderTokens.test.ts` covers the snippet
+renderer directly: boundary splitting, windowing, and dedent.
 
 E2E covers the four navigation paths, the overflow escape hatch, prerendered content,
 `aria-hidden` on the canvas, inspector focus handling, and theme persistence. It runs on

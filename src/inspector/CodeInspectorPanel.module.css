@@ -99,32 +99,51 @@
   line-height: 1.65;
 }
 
-/* Shiki emits its own inline background; neutralise it so the panel's surface shows. */
-.code :global(pre) {
+.pre {
   margin: 0;
   padding: 0;
-  background: transparent !important;
+  background: transparent;
   overflow-x: auto;
   tab-size: 2;
-}
-
-.code :global(code) {
+  white-space: pre;
   font-family: inherit;
 }
 
 /*
- * §7.2 — Shiki emits both themes as custom properties on every token
- * (`--shiki-dark` / `--shiki-light`). Selecting one here means a theme switch is a
- * repaint, not a re-fetch or a re-render of the panel contents.
+ * §7.2 — every span carries both theme colours as custom properties
+ * (`--shiki-dark` / `--shiki-light`), so switching theme is a repaint rather than a
+ * re-render or a re-fetch. Uncoloured segments (whitespace between tokens) have no
+ * custom properties set and fall back to the panel's text colour.
  */
-.code :global(span),
-.code :global(pre) {
-  color: var(--shiki-dark);
+.pre span {
+  color: var(--shiki-dark, var(--text-dim));
 }
 
-:global([data-theme='light']) .code :global(span),
-:global([data-theme='light']) .code :global(pre) {
-  color: var(--shiki-light);
+:global([data-theme='light']) .pre span {
+  color: var(--shiki-light, var(--text-dim));
+}
+
+/*
+ * The node's own character range.
+ *
+ * This is the point of the whole token-stream design: the highlight follows the node's
+ * exact offsets, so a deep node marks the handful of characters it actually spans rather
+ * than the whole enclosing statement. Because tokens are split at the range boundary, a
+ * single token that straddles the edge is partly marked.
+ *
+ * Rendered as a background wash plus full-strength text, so surrounding context stays
+ * readable instead of being dimmed into uselessness.
+ */
+.pre span[data-hit] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 1px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Whitespace inside the range still needs the wash, or the highlight looks perforated
+ * across indentation and line breaks. */
+.pre span[data-hit]:empty::before {
+  content: ' ';
 }
 
 .lineHint {

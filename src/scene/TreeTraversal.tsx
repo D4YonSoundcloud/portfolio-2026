@@ -4,6 +4,7 @@ import { Vector3 } from 'three';
 
 import type { AstNode } from '../ast-pipeline/schema.ts';
 import { useSceneStore } from '../store/sceneStore.ts';
+import { toInspectorTarget } from './inspectorTarget.ts';
 import {
   createSession,
   isWithinSession,
@@ -154,8 +155,11 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
       // null means the top of the visible tree or every branch exhausted; hold still.
       if (!nextId) return;
 
+      const nextNode = nodesById.get(nextId);
+      if (!nextNode) return;
+
       selfDriven.current = true;
-      openInspector(nextId);
+      openInspector(toInspectorTarget(nextNode));
     };
 
     window.addEventListener('wheel', onWheel, { passive: false });

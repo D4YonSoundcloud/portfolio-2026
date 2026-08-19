@@ -31,6 +31,15 @@ export const astNodeSchema = z.object({
   loc: z.object({
     startLine: z.number().int().nonnegative(),
     endLine: z.number().int().nonnegative(),
+    /**
+     * Absolute character offsets into the containing file, half-open [start, end).
+     *
+     * These are what the Code Inspector highlights against (§4.6). Lines alone are not
+     * enough: a node frequently starts and ends mid-line, and highlighting whole lines
+     * for a `StringLiteral` would point at the statement rather than the node.
+     */
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
   }),
   /** Human-readable identifier where one exists, e.g. `renderProjectCard`. */
   label: z.string().nullable(),
@@ -65,37 +74,61 @@ export const astGraphSchema = z.object({
 
 export type AstGraph = z.infer<typeof astGraphSchema>;
 
-export const snippetSchema = z.object({
-  nodeId: z.string(),
-  /** `src/scene/CameraRig.tsx › FunctionDeclaration` (§4.6). */
-  breadcrumb: z.string(),
-  /**
-   * Pre-highlighted by Shiki at build time — no highlighter ships to the client (§2).
-   *
-   * ONE markup string carrying both themes as CSS custom properties, not two parallel
-   * strings. Storing each snippet twice doubled the artifact for no gain, and a theme
-   * switch (§7.2) is now a CSS variable flip rather than swapping innerHTML.
-   */
-  html: z.string(),
-  startLine: z.number().int().nonnegative(),
+/**
+ * A syntax colour, as the two theme variants Shiki produced for it (§7.2).
+ *
+ * Stored once in a palette and referenced by index, because across a codebase there are
+ * only a few dozen distinct colours but hundreds of thousands of tokens.
+ */
+export const paletteEntrySchema = z.tuple([z.string(), z.string()]);
+export type PaletteEntry = z.infer<typeof paletteEntrySchema>;
+
+/**
+ * One source file: its text, plus a flat token stream describing how to colour it.
+ *
+ * The token stream is a flat number array in groups of three —
+ * `[offset, length, paletteIndex, offset, length, paletteIndex, ...]` — rather than an
+ * array of objects. Objects would repeat the three key names for every token, which at
+ * this volume is most of the payload.
+ */
+export const sourceFileSchema = z.object({
+  text: z.string(),
+  tokens: z.array(z.number().int()),
 });
 
-export type Snippet = z.infer<typeof snippetSchema>;
+export type SourceFile = z.infer<typeof sourceFileSchema>;
 
-export const snippetsFileSchema = z.object({
-  version: z.literal(1),
-  snippets: z.record(z.string(), snippetSchema),
-  /**
-   * Maps a node with no snippet of its own to the nearest ancestor that has one.
-   *
-   * Emitting a snippet for every node produces a file dominated by redundancy — a
-   * parent's snippet already contains every one of its children's, so the same source
-   * lines get highlighted and stored once per level of depth. Snippets are generated for
-   * structurally meaningful nodes only (see SNIPPET_MAX_DEPTH) and everything below
-   * resolves upward through this map, which costs a short string instead of a full
-   * duplicated highlight.
-   */
-  aliases: z.record(z.string(), z.string()),
+/**
+ * §4.6 — the source index. Replaces the old per-node snippet file entirely.
+ *
+ * ── Why this shape ───────────────────────────────────────────────────────────────────
+ * Version 1 stored pre-rendered highlighted HTML per node. That was redundant twice
+ * over: a parent's snippet already contains every one of its children's, so the same
+ * lines were highlighted once per level of depth; and every token carried its own
+ * `<span style="--shiki-light:…;--shiki-dark:…">` wrapper, repeated for the whole
+ * codebase. It also forced a depth cutoff, below which nodes had no snippet of their own
+ * and aliased to an ancestor's.
+ *
+ * Version 2 stores each file's text ONCE alongside a numeric token stream. A node is
+ * then just a character range into its own file (`AstNode.loc.start`/`.end`), which
+ * means EVERY node gets an exact, unaliased view — the depth cutoff and the alias map
+ * are both gone.
+ *
+ * Measured against this repository: 4.02MB → ~0.6MB raw. Transfer is close to a wash
+ * once gzipped (gzip crushes the repeated HTML well), so the win is `JSON.parse` cost
+ * and memory on low-end devices, not bandwidth.
+ *
+ * ── What the client does with it ─────────────────────────────────────────────────────
+ * Renders tokens as React elements (see inspector/renderTokens.ts). No highlighter
+ * ships, exactly as before, and nothing goes through `dangerouslySetInnerHTML` any more
+ * — text becomes text nodes, so escaping is no longer something that has to be right.
+ */
+export const sourceIndexSchema = z.object({
+  version: z.literal(2),
+  palette: z.array(paletteEntrySchema),
+  /** Keyed by the same `fileName` that appears on every AstNode. */
+  files: z.record(z.string(), sourceFileSchema),
 });
 
-export type SnippetsFile = z.infer<typeof snippetsFileSchema>;
+export type SourceIndex = z.infer<typeof sourceIndexSchema>;
+

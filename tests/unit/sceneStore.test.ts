@@ -75,11 +75,23 @@ describe('sceneStore', () => {
   });
 
   it('replaces inspector content rather than stacking panels (§4.6)', () => {
-    useSceneStore.getState().openInspector('a#root');
-    useSceneStore.getState().openInspector('b#root');
+    const target = (id: string) => ({
+      id,
+      fileName: 'src/App.tsx',
+      kind: 'SourceFile',
+      label: null,
+      start: 0,
+      end: 10,
+    });
+
+    useSceneStore.getState().openInspector(target('a#root'));
+    useSceneStore.getState().openInspector(target('b#root'));
     expect(useSceneStore.getState().inspectorNodeId).toBe('b#root');
+    // The panel renders from the target, so it must travel with the id (§4.6).
+    expect(useSceneStore.getState().inspectorTarget?.id).toBe('b#root');
 
     useSceneStore.getState().closeInspector();
     expect(useSceneStore.getState().inspectorNodeId).toBeNull();
+    expect(useSceneStore.getState().inspectorTarget).toBeNull();
   });
 });

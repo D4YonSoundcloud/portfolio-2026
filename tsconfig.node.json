@@ -23,7 +23,7 @@
     "scripts",
     "src/ast-pipeline/generate-ast-graph.ts",
     "src/ast-pipeline/layout.ts",
-    "src/ast-pipeline/snippets.ts",
+    "src/ast-pipeline/sourceIndex.ts",
     "src/ast-pipeline/schema.ts",
     "src/ast-pipeline/categorize.ts",
     "src/types"

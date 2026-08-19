@@ -57,15 +57,20 @@ jobs:
 
       # §10 — THE base path. GitHub Pages serves a project repo at
       # https://<user>.github.io/<repo>/, so Vite's `base` must be `/<repo>/`. For a
-      # custom domain (CNAME in public/) or a <user>.github.io user/org-page repo, it's
-      # `/` instead.
+      # custom domain (configured in Settings -> Pages) or a <user>.github.io user or
+      # org-page repo, it's `/` instead.
+      #
+      # NOTE: with an Actions publishing source, GitHub does NOT create or read a CNAME
+      # file — the domain lives in the Pages setting only. Adding public/CNAME does
+      # nothing here.
       #
       # `actions/configure-pages` resolves this for us and exposes it as `base_path`,
       # which is more reliable than hardcoding the repo name — rename the repo and this
       # keeps working. §10 calls this "the one config value that silently breaks every
       # asset link if it's wrong", so it's derived, not typed by hand.
       #
-      # If you set a custom domain, override with: BASE_PATH: /
+      # A custom domain makes this an empty string, which vite.config.ts normalises to
+      # `/`. See DEPLOYING.md for the full walkthrough.
       - name: Build
         run: npm run build
         env:
@@ -77,7 +82,7 @@ jobs:
         run: |
           test -f dist/index.html || { echo "::error::dist/index.html missing"; exit 1; }
           test -f dist/ast-graph.json || { echo "::error::ast-graph.json missing from dist"; exit 1; }
-          test -f dist/snippets.json || { echo "::error::snippets.json missing from dist"; exit 1; }
+          test -f dist/source-index.json || { echo "::error::source-index.json missing from dist"; exit 1; }
           # Structural, not content-based: greps for the carousel markup the prerender
           # emits, so editing your own copy in content.ts never breaks this check.
           grep -q 'aria-roledescription="slide"' dist/index.html \

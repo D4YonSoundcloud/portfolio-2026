@@ -7,12 +7,16 @@ import { categorize, kindName, readLabel } from './categorize.ts';
 import { computeLayout, type LayoutInput } from './layout.ts';
 import {
   astGraphSchema,
-  snippetsFileSchema,
+  sourceIndexSchema,
   type AstEdge,
   type AstGraph,
   type AstNode,
 } from './schema.ts';
-import { buildSnippets, disposeHighlighter, type SnippetSource } from './snippets.ts';
+import {
+  buildSourceIndex,
+  disposeHighlighter,
+  type SourceFileInput,
+} from './sourceIndex.ts';
 
 /**
  * §4 — extract → transform → layout → render. This script owns the first three stages;
@@ -52,11 +56,6 @@ const MAX_NODES = 2600;
  */
 const MAX_DEPTH = 6;
 
-/**
- * §4.6 — depth ceiling for snippet generation. Nodes below this alias upward to an
- * ancestor's snippet rather than storing a near-duplicate of it.
- */
-const SNIPPET_MAX_DEPTH = 2;
 
 /** Kinds that add noise without adding readable structure. */
 const SKIPPED_KINDS = new Set<ts.SyntaxKind>([
@@ -75,6 +74,9 @@ interface WorkingNode {
   childIndices: number[];
   startLine: number;
   endLine: number;
+  /** Absolute character offsets, half-open [start, end). */
+  start: number;
+  end: number;
   label: string | null;
   isFileRoot: boolean;
   /** Retained for pruning: a node's subtree size decides what survives the budget. */
@@ -139,6 +141,8 @@ function extract(files: readonly string[]): {
       childIndices: [],
       startLine: 0,
       endLine: lastLine,
+      start: 0,
+      end: text.length,
       label: relativePath.split('/').pop() ?? relativePath,
       isFileRoot: true,
       weight: 0,
@@ -158,8 +162,12 @@ function extract(files: readonly string[]): {
         return;
       }
 
-      const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line;
-      const end = sourceFile.getLineAndCharacterOfPosition(node.end).line;
+      // `getStart` skips leading trivia (comments, whitespace) so a highlighted range
+      // covers the node itself rather than the blank space above it. `pos` would not.
+      const startOffset = node.getStart(sourceFile);
+      const endOffset = node.end;
+      const start = sourceFile.getLineAndCharacterOfPosition(startOffset).line;
+      const end = sourceFile.getLineAndCharacterOfPosition(endOffset).line;
 
       const index = nodes.length;
       nodes.push({
@@ -172,6 +180,8 @@ function extract(files: readonly string[]): {
         childIndices: [],
         startLine: start,
         endLine: end,
+        start: startOffset,
+        end: endOffset,
         label: safeReadLabel(node),
         isFileRoot: false,
         weight: 0,
@@ -277,7 +287,7 @@ async function main(): Promise<void> {
     fileName: n.fileName,
     parentId: n.parentIndex === null ? null : (nodes[n.parentIndex]?.id ?? null),
     childIds: n.childIndices.map((c) => nodes[c]?.id ?? '').filter(Boolean),
-    loc: { startLine: n.startLine, endLine: n.endLine },
+    loc: { startLine: n.startLine, endLine: n.endLine, start: n.start, end: n.end },
     label: n.label,
     position: positions[i] ?? { x: 0, y: 0, z: 0 },
   }));
@@ -305,59 +315,38 @@ async function main(): Promise<void> {
   const validatedGraph = astGraphSchema.parse(graph);
 
   /**
-   * §4.6 — snippets are generated for structurally meaningful nodes only.
+   * §4.6 — the source index.
    *
-   * A snippet for every node means the same source lines are highlighted and stored once
-   * per level of depth, since a parent's `loc` range already spans all of its children's.
-   * At full depth that produced a multi-megabyte artifact for a payload the Code
-   * Inspector only ever reads one entry from. Deeper nodes alias to the nearest ancestor
-   * that has one, which is also the more useful thing to read: clicking a `StringLiteral`
-   * and being shown the enclosing declaration beats being shown the string.
+   * One entry per FILE, not per node. Because every node carries absolute character
+   * offsets into its own file (`loc.start`/`loc.end`), the inspector can show any node
+   * at any depth by highlighting a range of its file — so there is no per-node artifact,
+   * no depth cutoff below which nodes lose their own source, and no alias map.
    */
-  const snippetNodes = nodes
-    .map((node, index) => ({ node, index }))
-    .filter(({ node }) => node.isFileRoot || node.depth <= SNIPPET_MAX_DEPTH);
+  const sourceInputs: SourceFileInput[] = [...fileTexts.entries()].map(([fileName, text]) => ({
+    fileName,
+    text,
+  }));
 
-  const hasSnippet = new Set(snippetNodes.map(({ index }) => index));
-
-  const snippetSources: SnippetSource[] = snippetNodes.flatMap(({ node, index }) => {
-    const fileText = fileTexts.get(node.fileName);
-    const astNode = astNodes[index];
-    if (!fileText || !astNode) return [];
-    return [
-      {
-        nodeId: astNode.id,
-        fileName: node.fileName,
-        kind: node.kind,
-        label: node.label,
-        startLine: node.startLine,
-        endLine: node.endLine,
-        fileText,
-      },
-    ];
-  });
-
-  // Every remaining node points at its nearest ancestor that does have a snippet, so a
-  // click anywhere in the scene always opens something.
-  const aliases: Record<string, string> = {};
-  nodes.forEach((node, index) => {
-    if (hasSnippet.has(index)) return;
-    let cursor = node.parentIndex;
-    while (cursor !== null && !hasSnippet.has(cursor)) {
-      cursor = nodes[cursor]?.parentIndex ?? null;
-    }
-    const target = cursor === null ? null : astNodes[cursor]?.id;
-    const self = astNodes[index]?.id;
-    if (self && target) aliases[self] = target;
-  });
-
-  const snippets = await buildSnippets(snippetSources);
-  const validatedSnippets = snippetsFileSchema.parse({ version: 1, snippets, aliases });
+  const sourceIndex = await buildSourceIndex(sourceInputs);
+  const validatedIndex = sourceIndexSchema.parse(sourceIndex);
   await disposeHighlighter();
+
+  // Every node must land inside its own file, or the inspector would silently render an
+  // empty or truncated range. Cheap to check, and impossible to notice by eye otherwise.
+  for (const node of astNodes) {
+    const file = validatedIndex.files[node.fileName];
+    if (!file) throw new Error(`${node.id}: no source entry for ${node.fileName}`);
+    if (node.loc.start > node.loc.end || node.loc.end > file.text.length) {
+      throw new Error(
+        `${node.id}: range ${node.loc.start}..${node.loc.end} is outside ` +
+          `${node.fileName} (${file.text.length} chars)`,
+      );
+    }
+  }
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(join(OUT_DIR, 'ast-graph.json'), JSON.stringify(validatedGraph));
-  writeFileSync(join(OUT_DIR, 'snippets.json'), JSON.stringify(validatedSnippets));
+  writeFileSync(join(OUT_DIR, 'source-index.json'), JSON.stringify(validatedIndex));
 
   const elapsed = Date.now() - started;
   console.log(
@@ -365,7 +354,9 @@ async function main(): Promise<void> {
       `ast-graph  ${files.length} files · ${totalParsed} nodes parsed`,
       `           ${astNodes.length} rendered (cap ${MAX_NODES}) · ${edges.length} edges`,
       `           max depth ${validatedGraph.stats.maxDepth} · ${elapsed}ms`,
-      `snippets   ${Object.keys(validatedSnippets.snippets).length} generated · ${Object.keys(validatedSnippets.aliases).length} aliased to an ancestor`,
+      `source     ${Object.keys(validatedIndex.files).length} files indexed · ` +
+        `${validatedIndex.palette.length} palette colours · ` +
+        `${Math.round(validatedIndex.files[sourceInputs[0]?.fileName ?? '']?.tokens.length ?? 0)} tokens in first file`,
     ].join('\n'),
   );
 }

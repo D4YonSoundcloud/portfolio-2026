@@ -4,7 +4,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import { categorize, kindName } from '../../src/ast-pipeline/categorize.ts';
-import { astGraphSchema, snippetsFileSchema } from '../../src/ast-pipeline/schema.ts';
+import { astGraphSchema, sourceIndexSchema } from '../../src/ast-pipeline/schema.ts';
 
 /**
  * §11 — "a lightweight smoke test that the AST-graph JSON generation script runs without
@@ -16,7 +16,7 @@ import { astGraphSchema, snippetsFileSchema } from '../../src/ast-pipeline/schem
  */
 
 const GRAPH = resolve(__dirname, '../../public/ast-graph.json');
-const SNIPPETS = resolve(__dirname, '../../public/snippets.json');
+const SOURCE_INDEX = resolve(__dirname, '../../public/source-index.json');
 
 describe('categorize', () => {
   it('maps each SyntaxKind family to its visual bucket', () => {
@@ -83,40 +83,50 @@ describe('generated AST graph', () => {
     }
   });
 
-  it('produces schema-valid snippets carrying both themes as CSS variables (§7.2)', () => {
-    const parsed = snippetsFileSchema.parse(JSON.parse(readFileSync(SNIPPETS, 'utf8')));
-    const first = Object.values(parsed.snippets)[0];
-    expect(first).toBeDefined();
-    expect(first?.html).toContain('<pre');
-    // One markup string serving both themes, so a theme switch is a repaint.
-    expect(first?.html).toContain('--shiki-dark');
-    expect(first?.html).toContain('--shiki-light');
+  it('bakes absolute character offsets for every node, not just line numbers', () => {
+    const graph = astGraphSchema.parse(JSON.parse(readFileSync(GRAPH, 'utf8')));
+    for (const node of graph.nodes) {
+      expect(node.loc.end).toBeGreaterThanOrEqual(node.loc.start);
+    }
+  });
+
+  it('produces a schema-valid source index with a deduplicated palette', () => {
+    const index = sourceIndexSchema.parse(JSON.parse(readFileSync(SOURCE_INDEX, 'utf8')));
+    expect(Object.keys(index.files).length).toBeGreaterThan(0);
+    expect(index.palette.length).toBeGreaterThan(0);
+    // A few dozen colours across the whole codebase, not one per token.
+    expect(index.palette.length).toBeLessThan(200);
   });
 
   /**
-   * §4.6 — every node in the scene is clickable, so every node must resolve to a
-   * snippet: its own, or an ancestor's via the alias map.
+   * The design rests on token offsets being absolute indices into the file. If a future
+   * Shiki release made them per-line, every snippet on the site would silently render
+   * the wrong characters — so this asserts the round-trip directly.
    */
-  it('resolves every rendered node to a snippet within a few hops', () => {
-    const graph = astGraphSchema.parse(JSON.parse(readFileSync(GRAPH, 'utf8')));
-    const file = snippetsFileSchema.parse(JSON.parse(readFileSync(SNIPPETS, 'utf8')));
+  it('emits token streams whose offsets index the file text correctly', () => {
+    const index = sourceIndexSchema.parse(JSON.parse(readFileSync(SOURCE_INDEX, 'utf8')));
 
-    const unresolved = graph.nodes.filter((node) => {
-      let cursor: string | undefined = node.id;
-      for (let hops = 0; cursor && hops < 8; hops += 1) {
-        if (file.snippets[cursor]) return false;
-        cursor = file.aliases[cursor];
+    for (const [name, file] of Object.entries(index.files)) {
+      expect(file.tokens.length % 3).toBe(0);
+      for (let i = 0; i < file.tokens.length; i += 3) {
+        const offset = file.tokens[i]!;
+        const length = file.tokens[i + 1]!;
+        const paletteIndex = file.tokens[i + 2]!;
+        expect(offset + length, `${name} token ${i / 3}`).toBeLessThanOrEqual(file.text.length);
+        expect(index.palette[paletteIndex]).toBeDefined();
       }
-      return true;
-    });
-
-    expect(unresolved).toHaveLength(0);
+    }
   });
 
-  it('never aliases a node that has its own snippet', () => {
-    const file = snippetsFileSchema.parse(JSON.parse(readFileSync(SNIPPETS, 'utf8')));
-    for (const id of Object.keys(file.aliases)) {
-      expect(file.snippets[id]).toBeUndefined();
+  /** Every node must be renderable — this is what replaced the alias map. */
+  it('gives every node a range that lies inside its own file', () => {
+    const graph = astGraphSchema.parse(JSON.parse(readFileSync(GRAPH, 'utf8')));
+    const index = sourceIndexSchema.parse(JSON.parse(readFileSync(SOURCE_INDEX, 'utf8')));
+
+    for (const node of graph.nodes) {
+      const file = index.files[node.fileName];
+      expect(file, node.fileName).toBeDefined();
+      expect(node.loc.end).toBeLessThanOrEqual(file!.text.length);
     }
   });
 });

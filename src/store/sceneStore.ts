@@ -17,6 +17,23 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 export type Quality = 'high' | 'medium' | 'low';
 
+/**
+ * What the Code Inspector needs to render a node, carried with the open action.
+ *
+ * The panel lives outside the Canvas and has no access to the graph, while every caller
+ * of `openInspector` already holds the node. Passing the descriptor through avoids the
+ * panel re-fetching or re-deriving what the caller could simply hand it (§4.6).
+ */
+export interface InspectorTarget {
+  id: string;
+  fileName: string;
+  kind: string;
+  label: string | null;
+  /** Absolute character range of the node within its file. */
+  start: number;
+  end: number;
+}
+
 const TRANSITION_KEY = 'portfolio:transitionMode';
 const THEME_KEY = 'portfolio:themeMode';
 const DEPTH_KEY = 'portfolio:maxDepth';
@@ -37,6 +54,7 @@ export interface SceneStore {
   resolvedTheme: ResolvedTheme;
   hoveredNodeId: string | null;
   inspectorNodeId: string | null;
+  inspectorTarget: InspectorTarget | null;
   reducedMotion: boolean;
   quality: Quality;
   isCoarsePointer: boolean;
@@ -50,7 +68,7 @@ export interface SceneStore {
   setThemeMode: (mode: ThemeMode) => void;
   setResolvedTheme: (theme: ResolvedTheme) => void;
   setHoveredNodeId: (id: string | null) => void;
-  openInspector: (id: string) => void;
+  openInspector: (target: InspectorTarget) => void;
   closeInspector: () => void;
   setReducedMotion: (value: boolean) => void;
   setQuality: (quality: Quality) => void;
@@ -135,6 +153,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   resolvedTheme: 'dark',
   hoveredNodeId: null,
   inspectorNodeId: null,
+  inspectorTarget: null,
   reducedMotion,
   quality: seedQuality(),
   isCoarsePointer: isCoarsePointer(),
@@ -164,8 +183,9 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
 
   setResolvedTheme: (theme) => set({ resolvedTheme: theme }),
   setHoveredNodeId: (id) => set({ hoveredNodeId: id }),
-  openInspector: (id) => set({ inspectorNodeId: id, hoveredNodeId: null }),
-  closeInspector: () => set({ inspectorNodeId: null }),
+  openInspector: (target) =>
+    set({ inspectorNodeId: target.id, inspectorTarget: target, hoveredNodeId: null }),
+  closeInspector: () => set({ inspectorNodeId: null, inspectorTarget: null }),
   setReducedMotion: (value) =>
     set(value ? { reducedMotion: true, transitionMode: 'off' } : { reducedMotion: false }),
   setQuality: (quality) => set({ quality }),
@@ -176,7 +196,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     persist(DEPTH_KEY, String(clamped));
     // Closing the inspector too: a traversal session anchored on a node that the new
     // filter has just hidden would leave the panel showing something invisible.
-    set({ maxDepth: clamped, hoveredNodeId: null, inspectorNodeId: null });
+    set({ maxDepth: clamped, hoveredNodeId: null, inspectorNodeId: null, inspectorTarget: null });
   },
 }));
 

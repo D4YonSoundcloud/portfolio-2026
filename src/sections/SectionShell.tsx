@@ -2,6 +2,8 @@ import { useCallback, type ReactNode } from 'react';
 
 import { SECTIONS } from './sections.ts';
 import { useSceneStore } from '../store/sceneStore.ts';
+import { toInspectorTarget } from '../scene/inspectorTarget.ts';
+import type { AstNode } from '../ast-pipeline/schema.ts';
 import { inspectorCta } from './content.ts';
 import styles from './Section.module.css';
 
@@ -50,11 +52,11 @@ function ViewSourceButton({ index }: { index: number }): ReactNode {
     // node whose source best represents "the code behind this section" (§4.3).
     void fetch(`${import.meta.env.BASE_URL}ast-graph.json`)
       .then((response) => response.json())
-      .then((json: { nodes?: Array<{ id: string; fileName: string }> }) => {
+      .then((json: { nodes?: AstNode[] }) => {
         const match = json.nodes?.find(
           (node) => node.fileName.startsWith(section.clusterPath) && node.id.endsWith('#root'),
         );
-        if (match) openInspector(match.id);
+        if (match) openInspector(toInspectorTarget(match));
       })
       .catch(() => {
         /* §4.7 — additive polish; a failure here must never break the content. */

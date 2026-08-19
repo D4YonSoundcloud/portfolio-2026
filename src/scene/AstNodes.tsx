@@ -5,9 +5,10 @@ import type { BufferGeometry, InstancedMesh } from 'three';
 
 import type { CategoryGroup } from './useAstGraph.ts';
 import type { ScenePalette } from './palette.ts';
-import { createNodeMaterial } from './NodeMaterial.ts';
+import { createNodeMaterial } from './nodeMaterial.ts';
 import { detailForQuality } from './geometryTiers.ts';
 import { isUiTarget } from './pointerGuard.ts';
+import { toInspectorTarget } from './inspectorTarget.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 
 /**
@@ -252,7 +253,7 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
         if (isUiTarget(event.nativeEvent)) return;
         event.stopPropagation();
         const node = group.nodes[event.instanceId ?? -1];
-        if (node) openInspector(node.id);
+        if (node) openInspector(toInspectorTarget(node));
       }}
     >
       {/*

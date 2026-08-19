@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import { useSceneStore } from '../store/sceneStore.ts';
-import { loadSnippets, resolveSnippet } from './snippetLoader.ts';
-import type { Snippet } from '../ast-pipeline/schema.ts';
+import { loadSourceIndex } from './sourceLoader.ts';
+import { renderSnippet, type RenderedSnippet } from './renderTokens.ts';
+import type { PaletteEntry } from '../ast-pipeline/schema.ts';
 import styles from './CodeInspectorPanel.module.css';
 
 /**
@@ -19,20 +20,28 @@ import styles from './CodeInspectorPanel.module.css';
  */
 export function CodeInspectorPanel(): ReactNode {
   const inspectorNodeId = useSceneStore((s) => s.inspectorNodeId);
+  const inspectorTarget = useSceneStore((s) => s.inspectorTarget);
   const closeInspector = useSceneStore((s) => s.closeInspector);
   const reducedMotion = useSceneStore((s) => s.reducedMotion);
   // Matches the 767px breakpoint in the stylesheet where the panel becomes a sheet.
   const isSheet = useSceneStore((s) => s.isCoarsePointer);
 
-  const [snippet, setSnippet] = useState<Snippet | null>(null);
+  const [snippet, setSnippet] = useState<RenderedSnippet | null>(null);
+  const [palette, setPalette] = useState<PaletteEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusTo = useRef<HTMLElement | null>(null);
 
-  // §4.6 — opening a new node replaces the content rather than stacking panels.
+  /**
+   * §4.6 — opening a new node replaces the content rather than stacking panels.
+   *
+   * The whole source index is fetched once and reused: a node is a character RANGE into
+   * a file that is already loaded, so switching nodes — including walking the tree with
+   * the wheel — costs a re-render and no network at all.
+   */
   useEffect(() => {
-    if (!inspectorNodeId) {
+    if (!inspectorTarget) {
       setSnippet(null);
       setError(null);
       return;
@@ -41,14 +50,16 @@ export function CodeInspectorPanel(): ReactNode {
     let cancelled = false;
     setError(null);
 
-    void loadSnippets()
+    void loadSourceIndex()
       .then((index) => {
         if (cancelled) return;
-        // Deep nodes resolve to their nearest ancestor's snippet (§4.6), so a click
-        // anywhere in the scene always opens something readable.
-        const found = resolveSnippet(index, inspectorNodeId);
-        if (found) setSnippet(found);
-        else setError('No source is available for this node.');
+        const file = index.files[inspectorTarget.fileName];
+        if (!file) {
+          setError('No source is available for this node.');
+          return;
+        }
+        setPalette(index.palette);
+        setSnippet(renderSnippet(file, inspectorTarget.start, inspectorTarget.end));
       })
       .catch(() => {
         if (!cancelled) setError('Could not load the source for this node.');
@@ -57,7 +68,7 @@ export function CodeInspectorPanel(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [inspectorNodeId]);
+  }, [inspectorTarget]);
 
   // §9 — focus-trapped and Escape-dismissible, with focus restored on close.
   useEffect(() => {
@@ -84,9 +95,7 @@ export function CodeInspectorPanel(): ReactNode {
     };
   }, [inspectorNodeId, closeInspector]);
 
-  // One markup string for both themes; the active colours come from CSS custom
-  // properties keyed off `data-theme` (§7.2), so nothing re-renders on a theme switch.
-  const html = snippet?.html ?? null;
+
 
   return (
     <AnimatePresence>
@@ -134,8 +143,13 @@ export function CodeInspectorPanel(): ReactNode {
           >
             <header className={styles.header}>
               {/* §4.6 — breadcrumb: `src/scene/CameraRig.tsx › FunctionDeclaration`. */}
+              {/* §4.6 — `src/scene/CameraRig.tsx › FunctionDeclaration · CameraRig` */}
               <p className={styles.breadcrumb}>
-                {snippet?.breadcrumb ?? 'Loading source'}
+                {inspectorTarget
+                  ? `${inspectorTarget.fileName} › ${inspectorTarget.kind}${
+                      inspectorTarget.label ? ` · ${inspectorTarget.label}` : ''
+                    }`
+                  : 'Loading source'}
               </p>
               <button type="button" className={styles.close} onClick={closeInspector}>
                 <span aria-hidden="true">×</span>
@@ -146,17 +160,13 @@ export function CodeInspectorPanel(): ReactNode {
             <div className={styles.body}>
               {error ? (
                 <p className={styles.error}>{error}</p>
-              ) : html ? (
+              ) : snippet ? (
                 <div className={styles.code}>
-                  {snippet ? (
-                    <span className={styles.lineHint}>line {snippet.startLine}</span>
-                  ) : null}
-                  {/*
-                    Safe: this markup is produced by Shiki at BUILD TIME from this
-                    repository's own source (§4.1) and validated by Zod before it's
-                    written. No user input and no remote content ever reaches here.
-                  */}
-                  <div dangerouslySetInnerHTML={{ __html: html }} />
+                  <span className={styles.lineHint}>
+                    line {snippet.firstLine}
+                    {snippet.truncatedAbove || snippet.truncatedBelow ? ' · excerpt' : ''}
+                  </span>
+                  <SnippetBody snippet={snippet} palette={palette} />
                 </div>
               ) : (
                 <p className={styles.loading}>Loading source…</p>
@@ -173,5 +183,52 @@ export function CodeInspectorPanel(): ReactNode {
         </>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+/**
+ * Renders the segment list as React elements.
+ *
+ * Deliberately NOT `dangerouslySetInnerHTML`: segments carry raw source text, so letting
+ * React create text nodes means escaping is handled by the renderer rather than being
+ * something the build step has to get right.
+ *
+ * Colours arrive as the two theme variants Shiki produced, set as CSS custom properties
+ * on each span. The active one is selected in CSS by `data-theme` (§7.2), so switching
+ * theme repaints without re-rendering anything here.
+ */
+function SnippetBody({
+  snippet,
+  palette,
+}: {
+  snippet: RenderedSnippet;
+  palette: PaletteEntry[];
+}): ReactNode {
+  return (
+    <pre className={styles.pre}>
+      <code>
+        {snippet.segments.map((segment, index) => {
+          const colours = segment.paletteIndex === null ? null : palette[segment.paletteIndex];
+          return (
+            <span
+              // Segments are positional and the list is rebuilt wholesale on every node
+              // change, so the index is a stable identity here.
+              key={index}
+              data-hit={segment.highlighted || undefined}
+              style={
+                colours
+                  ? ({
+                      '--shiki-light': colours[0],
+                      '--shiki-dark': colours[1],
+                    } as CSSProperties)
+                  : undefined
+              }
+            >
+              {segment.text}
+            </span>
+          );
+        })}
+      </code>
+    </pre>
   );
 }
