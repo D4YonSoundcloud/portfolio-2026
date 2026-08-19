@@ -39,7 +39,7 @@ export const profile = {
   location: 'Orlando, FL, USA',
   email: 'mattd4y@gmail.com',
   links: [
-    { label: 'GitHub', href: 'https://d4yonsoundcloud.github.io/portfolio-2026' },
+    { label: 'GitHub', href: 'https://github.com/D4YonSoundcloud/portfolio-2026' },
     { label: 'LinkedIn', href: 'https://www.linkedin.com/in/matthew-day-developer/' },
   ],
 } as const;
@@ -47,57 +47,57 @@ export const profile = {
 /** §5 item 2 — brief, human, not a résumé restated in prose. */
 export const about = {
   paragraphs: [
-    'I like the part of the job where you read something carefully enough that the fix turns out to be small. Most of the work I am proud of removed code rather than adding it.',
-    'Lately that has meant query planners, cache invalidation, and build pipelines — systems where the correct answer is measurable and arguing about taste gets you nowhere.',
-    'Outside work I restore mechanical keyboards and lose to my daughter at chess with increasing regularity.',
+    'I like the part of the job where you read something carefully enough that the fix turns out to be small. A lot of the work I am proud of removed code rather than adding it.',
+    'Lately I have been working on Developer Tooling, LLM Integration + Pipeline Development, and (trying) to keep up with the newest advances in AI.',
+    'Outside work I am very active, with more hobbies than I can count. Currently I have been learning the rope dart/meteor hammer.',
   ],
   /** Small factual asides — the kind of detail that reads as specific rather than styled. */
   asides: [
     { key: 'Currently', value: 'Senior Engineer, Consultant' },
     { key: 'Based in', value: profile.location },
-    { key: 'Working in', value: 'TypeScript, React, Node, + many more' },
-    { key: 'Open to', value: 'Mid/Senior Level IC roles, Consultancy' },
+    { key: 'Working in', value: 'TypeScript, React, Node + many more' },
+    { key: 'Open to', value: 'Mid/Senior Level IC roles + Consultancing' },
   ],
 } as const;
 
 /** §5 item 3 — real specifics. Problem, constraints, decisions, outcome. */
 export const projects: readonly Project[] = [
   {
-    name: 'T.R.I.D.E.N.T',
-    context: 'Large Excel Sheet custom made UI with by-cell context aware LLM usage. 50,000+ Cells.',
-    problem:
-      'The account history endpoint had drifted to a p99 of 9.4s. It was the first screen after login, so it was effectively the product’s load time.',
-    constraint:
-      'No downtime window, no schema migration that locked the table, and the reporting team depended on the existing query shape.',
-    decision:
-      'Rather than rewrite the endpoint, I traced it to a keyset-pagination bug where an OR predicate defeated the composite index. Fixed the predicate, added a covering index, and put a 30-second read-through cache in front of the first page only — the page 96% of sessions never leave.',
-    outcome: 'p99 to 340ms. Two files changed, no migration, no rewrite.',
-    stack: ['React', 'Python', 'SQlite'],
-  },
-  {
     name: 'Ember',
-    context: 'Red Meters on-device front-end for viewing live sensor data from the Red Meter itself.',
+    context: 'Red Meters on-device GUI for viewing live sensor data from the Red Meter itself.',
     problem:
-      'A 41-minute median CI run meant people batched work into large PRs to avoid waiting, which made review worse and made failures harder to attribute.',
+      'The Red Meter streams real-time sensor data from an onboard Raspberry Pi 3B. As its front-end engineer, I had to make that raw telemetry readable and trustworthy.',
     constraint:
-      'The test suite could not be weakened — this codebase moved money — and the team had already rejected a proposal to split the monorepo.',
+      'The GUI had to run reliably on the Pi 3B' + 's limited memory. Real-time visuals couldn' + 't lag, drop frames, or crash, staying clear enough to read at a glance.',
     decision:
-      'Instrumented the runner before touching anything. 60% of wall-clock time was Docker layer rebuilds triggered by a lockfile write in a postinstall script. Pinned it, split the suite by historical runtime rather than by directory, and made integration tests run only against changed packages.',
+      'Built the front-end in Vue 2.6, with D3.js visualizations tuned to the memory ceiling. Added automated QA and build/test systems, plus a procedurally generated, animated 3D model of the device in Three.js for the company' + 's marketing site.',
     outcome:
-      'Median run to 7 minutes. PR size fell by about half over the next quarter, which was the actual goal.',
+      'A stable, field-ready GUI — my first engineering role.',
     stack: ['Vue', 'D3', 'Python'],
   },
   {
-    name: 'Coaster Clash 2k99',
-    context: 'The game I wanted to play, did not exist. So I created it.',
+    name: 'T.R.I.D.E.N.T',
+    context: 'Large Excel Sheet custom made UI with by-cell context aware LLM usage. 50,000+ Cells.',
     problem:
-      'A new embedding model shipped with better offline benchmarks and measurably worse user behaviour — clicks moved down the results page.',
+      'Used in the U.S. Military RRL process: workshops where experts manually work through this Excel file, typing values by hand — 10-30 minutes per cell.',
     constraint:
-      'The model had already been announced internally, and the team was attached to the benchmark numbers.',
+      'Speed mattered, but accuracy was the real constraint — the program would be useless if users had to rework every single answer the LLM gave.',
     decision:
-      'Built a small side-by-side evaluation harness using logged queries and actual click positions rather than the offline set. It showed the new model won on paraphrase and lost badly on exact-name lookup, which was 70% of real traffic. Proposed routing by query shape instead of picking a winner.',
+      'Dedicated software, web front-end, hosted back-end, both on Azure GOV-HIGH, plus a Vector Database populated with all approved answers from the company' + 's past contracts — grounding every suggestion in real precedent.',
+    outcome: '2 week workshops, condensed to 1-2 days.',
+    stack: ['React', 'Python', 'SQlite'],
+  },
+  {
+    name: 'Coaster Clash 2k99',
+    context: 'Rollercoaster Tower Defense — solo-built and self-published on Steam in July of 2025.',
+    problem:
+      'No engine or genre existed for a "rollercoaster tower defense" game. Tracks doubling as transport and attack lanes had never been built before, in any engine.',
+    constraint:
+      'No engine or genre existed for a "rollercoaster tower defense" game. Tracks doubling as transport and attack lanes had never been built before, in any engine.',
+    decision:
+      'Built a custom engine in Three.js with a Vue 3 front-end, handling rendering, game state, and pathing. CatmullRom splines drove real-time editable tracks and banking, GPU SIMD powered terrain generation, and custom collision.',
     outcome:
-      'Kept both. Exact-name queries route to the lexical index, everything else to embeddings. Click-through recovered and passed the old baseline.',
+      'Shipped on Steam, July 2025 — genre-first.',
     stack: ['Typescript', 'ThreeJs', 'Vue', 'Tauri'],
   },
 ];
@@ -108,32 +108,32 @@ export const experience: readonly Role[] = [
     period: '2026 — Now',
     title: 'Freelancer/Consultant',
     org: 'Personal',
-    note: 'Own the build and deploy path for ~40 engineers. Most of my week is other people’s unblocking.',
+    note: 'Helping people create or understand the software they did not think was even possible.',
   },
   {
     period: '2023 — 2026',
     title: 'Senior Software Engineer',
     org: 'Yulista Tactical Services',
-    note: 'Payments ledger and reconciliation. Where I learned to distrust averages.',
+    note: 'Mentored, architected, developed, and deployed. Custom LLM Integration.',
   },
   {
     period: '2020 — 2021',
     title: 'Low Code Developer',
     org: 'Skillstorm',
-    note: 'Early-stage, small team, wore every hat — including the ones I was bad at.',
+    note: 'Certified Senior Appian Developer. Worked with PwC, Vision Point Systems, and Appian themselves.',
   },
   {
     period: '2020 — 2021',
     title: 'Software Developer',
     org: 'Red Meters',
-    note: 'Geospatial tiling. First encounter with a query planner that outsmarted me.',
+    note: 'Data visualization and working in performance constrained enviroments.',
   },
 ];
 
 /** §5 item 5 — direct, minimal friction. No form backend on a static site. */
 export const contact = {
   lead: 'The fastest way to reach me is email. I read everything and reply to most things within a couple of days.',
-  note: 'Best for: staff/principal IC roles, performance or build-system consulting, or telling me I am wrong about something on this page.',
+  note: 'Best for: mid/senior IC roles, performance or build-system consulting, or telling me about some interesting tech.',
 } as const;
 
 /** §4.6 — the "view source" affordance's copy, shared across sections. */

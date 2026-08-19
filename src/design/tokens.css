@@ -97,11 +97,11 @@
   --focus-ring: #9584c4;
 
   /* Scrim behind text — a gradient, not an opaque panel (§7.1). */
-  --scrim-strength: 0.72;
+  --scrim-strength: 0.99;
   --scrim: radial-gradient(
-    120% 100% at 50% 50%,
+    80% 120% at 50% 50%,
     rgb(11 13 16 / var(--scrim-strength)) 0%,
-    rgb(11 13 16 / calc(var(--scrim-strength) * 0.82)) 45%,
+    rgb(11 13 16 / calc(var(--scrim-strength) * 0.82)) 15%,
     rgb(11 13 16 / 0%) 100%
   );
 
@@ -114,20 +114,28 @@
   --cat-expression: #8a8477;
   --cat-literal: #b0827e;
 
+  /* --cat-declaration: #f1f88d;
+  --cat-controlflow: #77fc6b;
+  --cat-jsx: #c6a24a;
+  --cat-import: #996f99;
+  --cat-expression: #87f5ea;
+  --cat-literal: #ff8a80; */
+
   /* Scene render inputs (§4.4, §7.2) — dark theme glows. */
   --scene-emissive: 0.85;
-  --scene-edge-opacity: 0.17;
-  --scene-node-scale: 1;
+  --scene-edge-opacity: 0.2;
+  --scene-node-scale: 0.85;
   --scene-bg-fog: #0b0d10;
+  
 
   /* Node material. Fully OPAQUE — refraction is faked by sampling a procedural
    * environment along a refracted vector, so the nodes still read as glass while
    * properly occluding each other. --scene-env-* are the two ends of that
    * environment gradient; they are not painted anywhere in the DOM. */
-  --scene-refraction: 0.72;
-  --scene-env-low: #0d1117;
-  --scene-env-high: #5a6478;
-  --scene-rim-strength: 0.85;
+  --scene-refraction: 0.9;
+  --scene-env-low: #2c1d1d;
+  --scene-env-high: #747474;
+  --scene-rim-strength: 0.5;
   /* How far non-active nodes fade while something is hovered or selected. */
   --scene-dim: 0.42;
 }
@@ -170,7 +178,7 @@
   --cat-expression: #5c574c;
   --cat-literal: #8a4f4a;
 
-  --scene-emissive: 0;
+  --scene-emissive: 0.85;
   --scene-edge-opacity: 0.32;
   --scene-node-scale: 0.72;
   --scene-bg-fog: #e8e6df;
@@ -178,10 +186,10 @@
   /* Light theme cannot glow, so the glass reads as polished acrylic on paper: a paler
    * environment, weaker refraction, a quieter ink rim. */
   --scene-refraction: 0.5;
-  --scene-env-low: #c9c6bd;
+  --scene-env-low: #161513;
   --scene-env-high: #ffffff;
-  --scene-rim-strength: 0.4;
-  --scene-dim: 0.3;
+  --scene-rim-strength: 0.8;
+  --scene-dim: 0.4;
 }
 
 /* §8.1 — the scrim goes slightly stronger on mobile, where there's less margin between

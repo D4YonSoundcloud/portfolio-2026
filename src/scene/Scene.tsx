@@ -48,9 +48,9 @@ export function Scene(): ReactNode {
     <>
       {/* §4.4 — lit minimally: one ambient plus one point light. The nodes' emissive
           does most of the work on dark; on light the ambient carries it. */}
-      <ambientLight intensity={palette.theme === 'dark' ? 0.35 : 1.15} />
+      <ambientLight intensity={palette.theme === 'dark' ? 0.7 : 1.15} />
       <pointLight position={[30, 40, 50]} intensity={palette.theme === 'dark' ? 1.1 : 0.5} />
-      <fog attach="fog" args={[palette.fog.getHex(), 60, 190]} />
+      <fog attach="fog" args={[palette.fog.getHex(), 20, 190]} />
 
       <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
 
@@ -92,8 +92,8 @@ export function Scene(): ReactNode {
               // Threshold raised from 0.32: the glass material's Fresnel rims are bright
               // at grazing angles on every one of ~2600 nodes, and at the old threshold
               // the whole cloud blooms into a haze instead of the rims reading as edges.
-              intensity={0.7}
-              luminanceThreshold={0.55}
+              intensity={0.32}
+              luminanceThreshold={0.1}
               luminanceSmoothing={0.9}
               mipmapBlur
             />
