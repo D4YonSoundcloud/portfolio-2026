@@ -5,7 +5,7 @@ import type { BufferGeometry, InstancedMesh } from 'three';
 
 import type { CategoryGroup } from './useAstGraph.ts';
 import type { ScenePalette } from './palette.ts';
-import { createNodeMaterial } from './NodeMaterial.ts';
+import { createNodeMaterial } from './nodeMaterial.ts';
 import { detailForQuality } from './geometryTiers.ts';
 import { isUiTarget } from './pointerGuard.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
