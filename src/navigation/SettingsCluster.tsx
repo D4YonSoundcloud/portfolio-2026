@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 
+import { DepthFilter } from './DepthFilter.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { TransitionModeToggle } from './TransitionModeToggle.tsx';
 import { useSceneStore } from '../store/sceneStore.ts';
@@ -45,7 +46,9 @@ export function SettingsCluster(): ReactNode {
   }, [open]);
 
   return (
-    <div className={styles.cluster} ref={containerRef}>
+    // `data-ui` marks this whole subtree as chrome, so a click or hover here never
+    // reaches the AST nodes rendered behind it (see scene/pointerGuard.ts).
+    <div className={styles.cluster} ref={containerRef} data-ui>
       <AnimatePresence>
         {open ? (
           <motion.div
@@ -58,6 +61,7 @@ export function SettingsCluster(): ReactNode {
           >
             <ThemeToggle />
             <TransitionModeToggle />
+            <DepthFilter />
           </motion.div>
         ) : null}
       </AnimatePresence>

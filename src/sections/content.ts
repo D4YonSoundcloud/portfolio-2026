@@ -33,7 +33,7 @@ export interface Role {
 export const profile = {
   name: 'Matthew Day',
   /** §5 item 1 — "a short, specific statement of what you do", not a job title. */
-  statement: 'I make peoples lifes easier, by building software they need.',
+  statement: 'Helping make peoples lives easier, by building software they need.',
   heroSupport:
     '6 years on data-heavy products, from front-end to back-end, and everything in between, if I havent heard of it, I would love to learn about it.',
   location: 'Orlando, FL, USA',

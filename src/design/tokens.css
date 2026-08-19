@@ -120,10 +120,13 @@
   --scene-node-scale: 1;
   --scene-bg-fog: #0b0d10;
 
-  /* Frosted-glass node material. Low base alpha + strong Fresnel rim = translucent
-   * face-on, bright at grazing angles. Additive blending on dark, so overlapping
-   * nodes accumulate like caustics. */
-  --scene-glass-alpha: 0.16;
+  /* Node material. Fully OPAQUE — refraction is faked by sampling a procedural
+   * environment along a refracted vector, so the nodes still read as glass while
+   * properly occluding each other. --scene-env-* are the two ends of that
+   * environment gradient; they are not painted anywhere in the DOM. */
+  --scene-refraction: 0.72;
+  --scene-env-low: #0d1117;
+  --scene-env-high: #5a6478;
   --scene-rim-strength: 0.85;
   /* How far non-active nodes fade while something is hovered or selected. */
   --scene-dim: 0.42;
@@ -172,9 +175,11 @@
   --scene-node-scale: 0.72;
   --scene-bg-fog: #e8e6df;
 
-  /* Light theme cannot glow, so the glass reads as etched acrylic on paper: higher
-   * base alpha, a quieter ink rim, normal blending. */
-  --scene-glass-alpha: 0.42;
+  /* Light theme cannot glow, so the glass reads as polished acrylic on paper: a paler
+   * environment, weaker refraction, a quieter ink rim. */
+  --scene-refraction: 0.5;
+  --scene-env-low: #c9c6bd;
+  --scene-env-high: #ffffff;
   --scene-rim-strength: 0.4;
   --scene-dim: 0.3;
 }

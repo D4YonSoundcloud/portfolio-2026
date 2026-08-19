@@ -19,6 +19,14 @@ export type Quality = 'high' | 'medium' | 'low';
 
 const TRANSITION_KEY = 'portfolio:transitionMode';
 const THEME_KEY = 'portfolio:themeMode';
+const DEPTH_KEY = 'portfolio:maxDepth';
+
+/**
+ * Depth levels offered by the filter. The build-time pipeline caps extraction at depth 6
+ * (MAX_DEPTH in generate-ast-graph.ts), so 6 means "everything that exists".
+ */
+export const DEPTH_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+export const MAX_DEPTH_LEVEL = 6;
 
 export interface SceneStore {
   focusedIndex: number;
@@ -32,6 +40,8 @@ export interface SceneStore {
   reducedMotion: boolean;
   quality: Quality;
   isCoarsePointer: boolean;
+  /** Deepest AST level rendered. Also bounds tree traversal (§4.5). */
+  maxDepth: number;
 
   setFocusedIndex: (index: number) => void;
   advanceFocus: (delta: number) => void;
@@ -45,6 +55,7 @@ export interface SceneStore {
   setReducedMotion: (value: boolean) => void;
   setQuality: (quality: Quality) => void;
   setCoarsePointer: (value: boolean) => void;
+  setMaxDepth: (depth: number) => void;
 }
 
 function readStored<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -54,6 +65,16 @@ function readStored<T extends string>(key: string, allowed: readonly T[], fallba
     return allowed.includes(value as T) ? (value as T) : fallback;
   } catch {
     // Private browsing / disabled storage — the preference just doesn't persist.
+    return fallback;
+  }
+}
+
+function readStoredNumber(key: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const parsed = Number.parseInt(window.localStorage.getItem(key) ?? '', 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  } catch {
     return fallback;
   }
 }
@@ -117,6 +138,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   reducedMotion,
   quality: seedQuality(),
   isCoarsePointer: isCoarsePointer(),
+  maxDepth: readStoredNumber(DEPTH_KEY, MAX_DEPTH_LEVEL),
 
   setFocusedIndex: (index) => {
     const clamped = Math.max(0, Math.min(SECTIONS.length - 1, index));
@@ -148,6 +170,14 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     set(value ? { reducedMotion: true, transitionMode: 'off' } : { reducedMotion: false }),
   setQuality: (quality) => set({ quality }),
   setCoarsePointer: (value) => set({ isCoarsePointer: value }),
+
+  setMaxDepth: (depth) => {
+    const clamped = Math.max(1, Math.min(MAX_DEPTH_LEVEL, Math.round(depth)));
+    persist(DEPTH_KEY, String(clamped));
+    // Closing the inspector too: a traversal session anchored on a node that the new
+    // filter has just hidden would leave the panel showing something invisible.
+    set({ maxDepth: clamped, hoveredNodeId: null, inspectorNodeId: null });
+  },
 }));
 
 /**

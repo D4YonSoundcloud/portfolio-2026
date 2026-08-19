@@ -6,6 +6,8 @@ import type { BufferGeometry, InstancedMesh } from 'three';
 import type { CategoryGroup } from './useAstGraph.ts';
 import type { ScenePalette } from './palette.ts';
 import { createNodeMaterial } from './NodeMaterial.ts';
+import { detailForQuality } from './geometryTiers.ts';
+import { isUiTarget } from './pointerGuard.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 
 /**
@@ -53,6 +55,9 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
   const openInspector = useSceneStore((s) => s.openInspector);
 
   const color = palette.categories[group.category];
+  const tier = group.tier;
+  const quality = useSceneStore((s) => s.quality);
+  const detail = detailForQuality(tier, quality);
 
   /**
    * The material is rebuilt per theme, not mutated: `onBeforeCompile` bakes uniforms and
@@ -71,11 +76,12 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
     [group.nodes],
   );
 
-  /** Shallow nodes read slightly larger, so structure is legible before detail. */
-  const scales = useMemo(
-    () => group.nodes.map((node) => (node.depth <= SHALLOW_DEPTH ? 1 : 0.62)),
-    [group.nodes],
-  );
+  /**
+   * Size now comes from the tier's radius (geometryTiers.ts), so every instance in a
+   * batch shares one scale. Kept as an array anyway because the LOD pass writes
+   * per-instance matrices and needs a per-instance base to return to.
+   */
+  const scales = useMemo(() => group.nodes.map(() => 1), [group.nodes]);
 
   /** Node id -> local instance index, so a store change resolves without scanning. */
   const indexById = useMemo(() => {
@@ -231,6 +237,8 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
       onPointerOver={(event) => {
         // Coarse pointers have no hover state; skip the work entirely (§8.2).
         if (readSceneStore().isCoarsePointer) return;
+        // Chrome wins: hovering a button must not also light up a node behind it.
+        if (isUiTarget(event.nativeEvent)) return;
         event.stopPropagation();
         const node = group.nodes[event.instanceId ?? -1];
         if (node) setHoveredNodeId(node.id);
@@ -240,15 +248,26 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
         setHoveredNodeId(null);
       }}
       onClick={(event) => {
+        // Chrome wins: clicking a control must never also select the node behind it.
+        if (isUiTarget(event.nativeEvent)) return;
         event.stopPropagation();
         const node = group.nodes[event.instanceId ?? -1];
         if (node) openInspector(node.id);
       }}
     >
-      {/* Detail 0 keeps the icosahedron faceted on purpose: flat faces give the Fresnel
-          term hard edges to catch, which is what reads as cut glass rather than a
-          soft blob. A smoother sphere loses the effect entirely. */}
-      <icosahedronGeometry ref={geometryRef} args={[0.55, 0]} />
+      {/*
+        Geometry is chosen by tree depth (geometryTiers.ts): dense faceted polyhedra at
+        the root, resolving to tetrahedra at the leaves. Facets matter here — flat faces
+        give the Fresnel and refraction terms hard edges to catch, which is what reads
+        as cut glass. A smooth sphere would lose the effect entirely.
+      */}
+      {tier.kind === 'icosahedron' ? (
+        <icosahedronGeometry ref={geometryRef} args={[tier.radius, detail]} />
+      ) : tier.kind === 'octahedron' ? (
+        <octahedronGeometry ref={geometryRef} args={[tier.radius, detail]} />
+      ) : (
+        <tetrahedronGeometry ref={geometryRef} args={[tier.radius, detail]} />
+      )}
     </instancedMesh>
   );
 }

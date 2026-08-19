@@ -1,9 +1,39 @@
+/*
+ * The panel is NON-MODAL: the scene stays live behind it so you can hover, select and
+ * wheel-traverse other nodes while reading a snippet.
+ *
+ * `pointer-events: none` is what makes that true. As a full-viewport fixed element this
+ * would otherwise swallow every pointer and wheel event in the document — which it did,
+ * blocking node picking and tree traversal entirely.
+ *
+ * The blur is gone for the same reason the dim is now barely there: the camera
+ * deliberately frames the selected node in the space beside the panel (CameraRig), and
+ * blurring the whole viewport defeats that framing.
+ *
+ * Click-outside-to-close is handled by the Canvas's onPointerMissed (SceneCanvas), not
+ * by catching clicks here.
+ */
 .backdrop {
   position: fixed;
   inset: 0;
   z-index: var(--z-inspector);
-  background: color-mix(in srgb, var(--bg-sunken) 55%, transparent);
-  backdrop-filter: blur(2px);
+  pointer-events: none;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--bg-sunken) 42%, transparent) 0%,
+    transparent 55%
+  );
+}
+
+/* On mobile the sheet comes up from the bottom, so the falloff runs the other way. */
+@media (max-width: 767px) {
+  .backdrop {
+    background: linear-gradient(
+      to top,
+      color-mix(in srgb, var(--bg-sunken) 42%, transparent) 0%,
+      transparent 55%
+    );
+  }
 }
 
 /* §4.6 — a fixed slide-in panel on the right edge. Desktop. */

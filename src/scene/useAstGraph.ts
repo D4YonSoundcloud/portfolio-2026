@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Vector3 } from 'three';
 
 import { astGraphSchema, type AstGraph, type AstNode, type NodeCategory } from '../ast-pipeline/schema.ts';
+import { tierForDepth, type GeometryTier } from './geometryTiers.ts';
 import { SECTIONS } from '../sections/sections.ts';
 import { useSceneStore, type Quality } from '../store/sceneStore.ts';
 
@@ -17,8 +18,18 @@ const NODE_CAP: Record<Quality, number> = {
   low: 900,
 };
 
+/**
+ * One draw call's worth of nodes: a single category AND a single geometry tier.
+ *
+ * Category alone is not enough to batch by, because depth varies freely within a
+ * category and each depth tier needs its own geometry. Splitting on both gives at most
+ * `categories x tiers` meshes — around two dozen draw calls rather than 2600, which is
+ * still comfortably within budget.
+ */
 export interface CategoryGroup {
+  key: string;
   category: NodeCategory;
+  tier: GeometryTier;
   nodes: AstNode[];
   /** Index into the full node array, so edges can still be resolved after filtering. */
   indices: number[];
@@ -33,11 +44,14 @@ export interface PreparedGraph {
   /** Camera target per focus item — centroid of that section's AST cluster (§4.3, §5). */
   clusterTargets: Vector3[];
   visibleIds: Set<string>;
+  /** Visible nodes by id — the lookup table tree traversal walks. */
+  nodesById: Map<string, AstNode>;
 }
 
 export function useAstGraph(): PreparedGraph | null {
   const [graph, setGraph] = useState<AstGraph | null>(null);
   const quality = useSceneStore((s) => s.quality);
+  const maxDepth = useSceneStore((s) => s.maxDepth);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,25 +85,32 @@ export function useAstGraph(): PreparedGraph | null {
 
     const cap = NODE_CAP[quality];
 
+    // The depth filter applies BEFORE the quality cap, so lowering depth frees budget
+    // for the levels that remain rather than simply removing nodes from the view.
+    const withinDepth = graph.nodes
+      .map((node, index) => ({ node, index }))
+      .filter(({ node }) => node.depth <= maxDepth);
+
     /**
      * §4.5 — the default view shows high-level nodes. When the cap bites, shallow nodes
      * win, so what's dropped is leaf detail rather than structural skeleton. Ties break
      * on original index to keep the result stable across renders.
      */
-     const ranked = graph.nodes
-      .map((node, index) => ({ node, index }))
+    const ranked = withinDepth
       .sort((a, b) => a.node.depth - b.node.depth || a.index - b.index)
       .slice(0, cap);
 
     const visibleIndices = new Set(ranked.map((entry) => entry.index));
     const visibleIds = new Set(ranked.map((entry) => entry.node.id));
 
-    const byCategory = new Map<NodeCategory, CategoryGroup>();
+    const byBatch = new Map<string, CategoryGroup>();
     for (const { node, index } of ranked) {
-      let group = byCategory.get(node.category);
+      const tier = tierForDepth(node.depth);
+      const key = `${node.category}:${tier.id}`;
+      let group = byBatch.get(key);
       if (!group) {
-        group = { category: node.category, nodes: [], indices: [] };
-        byCategory.set(node.category, group);
+        group = { key, category: node.category, tier, nodes: [], indices: [] };
+        byBatch.set(key, group);
       }
       group.nodes.push(node);
       group.indices.push(index);
@@ -109,12 +130,14 @@ export function useAstGraph(): PreparedGraph | null {
 
     return {
       graph,
-      groups: [...byCategory.values()],
+      groups: [...byBatch.values()],
       edgePositions,
       clusterTargets: computeClusterTargets(graph),
       visibleIds,
+      // Traversal needs random access by id; building it once here beats a find() per step.
+      nodesById: new Map(ranked.map(({ node }) => [node.id, node])),
     };
-  }, [graph, quality]);
+  }, [graph, quality, maxDepth]);
 }
 
 /**

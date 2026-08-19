@@ -26,6 +26,7 @@ export function DotNav(): ReactNode {
     <nav
       className={styles.nav}
       data-orientation={orientation}
+      data-ui
       aria-label="Section navigation"
     >
       <ol className={styles.list}>

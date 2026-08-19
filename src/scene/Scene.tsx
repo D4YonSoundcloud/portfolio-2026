@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Vector3 } from 'three';
 import { PerformanceMonitor } from '@react-three/drei';
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
 
@@ -7,6 +8,7 @@ import { AstNodes } from './AstNodes.tsx';
 import { CameraRig } from './CameraRig.tsx';
 import { NodeTooltip } from './NodeTooltip.tsx';
 import { SelectionOverlay } from './SelectionOverlay.tsx';
+import { TreeTraversal } from './TreeTraversal.tsx';
 import { readPalette } from './palette.ts';
 import { useAstGraph } from './useAstGraph.ts';
 import { useSceneStore } from '../store/sceneStore.ts';
@@ -23,6 +25,7 @@ export function Scene(): ReactNode {
   const resolvedTheme = useSceneStore((s) => s.resolvedTheme);
   const quality = useSceneStore((s) => s.quality);
   const setQuality = useSceneStore((s) => s.setQuality);
+  const inspectorNodeId = useSceneStore((s) => s.inspectorNodeId);
 
   // Re-read on theme change only — getComputedStyle forces a style recalc and must
   // never run in the frame loop (§7.2).
@@ -30,6 +33,14 @@ export function Scene(): ReactNode {
   useEffect(() => {
     setPalette(readPalette(resolvedTheme));
   }, [resolvedTheme]);
+
+  // Position of the node open in the inspector, so the camera can frame it clear of
+  // the panel. Null whenever the panel is closed.
+  const inspectTarget = useMemo(() => {
+    if (!prepared || !inspectorNodeId) return null;
+    const node = prepared.graph.nodes.find((n) => n.id === inspectorNodeId);
+    return node ? new Vector3(node.position.x, node.position.y, node.position.z) : null;
+  }, [prepared, inspectorNodeId]);
 
   if (!prepared) return null;
 
@@ -41,18 +52,22 @@ export function Scene(): ReactNode {
       <pointLight position={[30, 40, 50]} intensity={palette.theme === 'dark' ? 1.1 : 0.5} />
       <fog attach="fog" args={[palette.fog.getHex(), 60, 190]} />
 
-      <CameraRig clusterTargets={prepared.clusterTargets} />
+      <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
 
       <AstEdges positions={prepared.edgePositions} palette={palette} />
 
       {prepared.groups.map((group) => (
-        <AstNodes key={group.category} group={group} palette={palette} />
+        // Keyed by category:tier — one mesh per batch (see useAstGraph).
+        <AstNodes key={group.key} group={group} palette={palette} />
       ))}
 
       <NodeTooltip graph={prepared.graph} />
 
       {/* Selection gets its own shape language, not just a brighter node. */}
       <SelectionOverlay graph={prepared.graph} palette={palette} />
+
+      {/* Wheel walks the tree while the inspector is open. Renders nothing. */}
+      <TreeTraversal nodesById={prepared.nodesById} />
 
       {/*
         §8.3 — PerformanceMonitor fine-tunes upward from the boot-seeded quality tier

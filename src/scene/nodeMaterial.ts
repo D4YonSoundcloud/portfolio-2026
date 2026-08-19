@@ -1,40 +1,37 @@
-import {
-  AdditiveBlending,
-  Color,
-  MeshPhysicalMaterial,
-  NormalBlending,
-  type IUniform,
-} from 'three';
+import { Color, MeshPhysicalMaterial, NormalBlending, type IUniform } from 'three';
 
 import type { ScenePalette } from './palette.ts';
 
 /**
- * The node material — frosted glass, faked.
+ * The node material — opaque, with faked refraction.
  *
- * ── Why not real refraction ──────────────────────────────────────────────────────────
- * `MeshPhysicalMaterial.transmission` (and drei's MeshTransmissionMaterial) render the
- * scene to a backdrop target every frame and sample it. That is designed for a handful
- * of hero objects. Here there are ~2600 instances, and worse, a single backdrop sample
- * cannot refract the OTHER glass nodes behind it — with a cloud this dense the result is
- * muddy AND expensive, which is the worst of both.
+ * ── Why opaque ───────────────────────────────────────────────────────────────────────
+ * The previous version was translucent with additive blending. That was the wrong call:
+ * with ~2600 overlapping nodes the accumulated alpha washed the scene out, and because
+ * an InstancedMesh cannot sort its own instances, transparency also meant giving up
+ * `depthWrite` — so nothing ever occluded anything and the cloud had no readable depth.
  *
- * What actually sells "glass" at a glance is the Fresnel term: translucent face-on,
- * bright and saturated at grazing angles. That plus low base alpha and a faceted
- * geometry gets most of the read for the cost of a dot product. Real transmission is
- * reserved for the one node the visitor is interacting with (see SelectionRing).
+ * Going opaque fixes both at once. Depth writes come back, near nodes properly hide far
+ * ones, and the sorting problem disappears because there is nothing to sort.
  *
- * ── The sorting problem ──────────────────────────────────────────────────────────────
- * Transparency needs back-to-front sorting, and an InstancedMesh cannot sort its own
- * instances — they are one draw call. So on dark we use ADDITIVE blending, which is
- * order-independent by construction: overlapping nodes accumulate like caustics and
- * there is simply no wrong order. Additive is invisible on a pale ground, so light
- * theme uses normal blending with `depthWrite: false` and a higher base alpha, which
- * reads as etched acrylic on paper rather than glowing crystal.
+ * ── Faking refraction without transparency ───────────────────────────────────────────
+ * Real refraction needs the scene behind the object, which means a backdrop render pass
+ * per frame — hopeless across thousands of instances. But refraction reads to the eye as
+ * three specific cues, none of which actually require seeing through anything:
+ *
+ *   1. the image bending at the surface   → sample a procedural environment along
+ *                                            `refract()` rather than a real backdrop
+ *   2. colour fringing at the edges       → refract R/G/B at slightly different IORs
+ *   3. bright grazing edges               → Fresnel, which is what sold the old version
+ *
+ * The "environment" is a procedural gradient plus a key-light lobe, evaluated in world
+ * space so the highlights swim across the facets as the camera drifts. No texture, no
+ * extra pass, no asset to load — just arithmetic on a direction vector.
  *
  * ── Interaction state ────────────────────────────────────────────────────────────────
- * `aState` is a per-instance vec2: (hover, selected), each 0→1 and animated on the CPU
- * in AstNodes. Keeping it an instanced attribute is what lets one node in a batch of
- * hundreds light up without breaking the single draw call.
+ * `aState` is a per-instance vec2 (hover, selected), each 0→1, animated in AstNodes.
+ * Keeping it an instanced attribute is what lets one node in a batch of hundreds light
+ * up without breaking the single draw call. The hover behaviour is unchanged.
  */
 
 export interface NodeMaterialUniforms {
@@ -44,7 +41,15 @@ export interface NodeMaterialUniforms {
   uRimColor: IUniform<Color>;
   uRimStrength: IUniform<number>;
   uRimPower: IUniform<number>;
-  uBaseAlpha: IUniform<number>;
+  /** How strongly the refracted environment replaces the lit base colour. */
+  uRefraction: IUniform<number>;
+  /** Index of refraction, as the eta passed to `refract()`. */
+  uIor: IUniform<number>;
+  /** Per-channel IOR offset — this is the colour fringing. */
+  uDispersion: IUniform<number>;
+  uEnvLow: IUniform<Color>;
+  uEnvHigh: IUniform<Color>;
+  uKeyColor: IUniform<Color>;
 }
 
 export interface NodeMaterial {
@@ -56,34 +61,38 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
   const dark = palette.theme === 'dark';
 
   const uniforms: NodeMaterialUniforms = {
-    uDim: { value: 0.1 },
+    uDim: { value: 1 },
     uTime: { value: 0 },
-    // Rim tints toward white on dark so the facet edges read as light through glass;
-    // on light it stays in the category ink so the object reads as drawn, not lit.
-    uRimColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.9) : color.clone() },
+    uRimColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.55) : color.clone() },
     uRimStrength: { value: palette.rimStrength },
     uRimPower: { value: dark ? 2.4 : 3.1 },
-    uBaseAlpha: { value: palette.glassAlpha },
+    uRefraction: { value: palette.refraction },
+    uIor: { value: 0.72 },
+    uDispersion: { value: dark ? 0.035 : 0.022 },
+    uEnvLow: { value: palette.envLow.clone() },
+    uEnvHigh: { value: palette.envHigh.clone() },
+    uKeyColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.7) : color.clone() },
   };
 
   const material = new MeshPhysicalMaterial({
     color,
-    // Emissive stays low: on dark the rim + bloom does the glowing, and pushing emissive
-    // too hard flattens the Fresnel gradient that makes it read as glass in the first place.
     emissive: color,
-    emissiveIntensity: palette.emissiveIntensity * 0.4,
-    roughness: dark ? 0.25 : 0.55,
+    // Emissive stays low: the refraction and rim carry the look now, and a strong
+    // emissive flattens the Fresnel gradient that makes the facets read.
+    emissiveIntensity: palette.emissiveIntensity * 0.25,
+    roughness: dark ? 0.22 : 0.5,
     metalness: 0,
-    // Frosted, not polished: a broad specular lobe instead of a mirror highlight.
-    sheen: dark ? 0.6 : 0.2,
+    // Frosted rather than polished: a broad specular lobe, not a mirror highlight.
+    sheen: dark ? 0.5 : 0.2,
     sheenColor: color.clone().lerp(new Color('#ffffff'), 0.4),
-    sheenRoughness: 0.7,
-    transparent: true,
+    sheenRoughness: 0.75,
+
+    // Fully opaque. Depth writes restored, so the cloud finally occludes itself.
+    transparent: false,
     opacity: 1,
-    // Order-independent on dark; on light, disabling depth writes avoids the worst of
-    // the unsortable-instance artefacts without turning the cloud into soup.
-    blending: dark ? AdditiveBlending : NormalBlending,
-    depthWrite: false,
+    depthWrite: true,
+    depthTest: true,
+    blending: NormalBlending,
     toneMapped: dark,
   });
 
@@ -116,23 +125,62 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
         uniform vec3 uRimColor;
         uniform float uRimStrength;
         uniform float uRimPower;
-        uniform float uBaseAlpha;
-        varying vec2 vState;`,
+        uniform float uRefraction;
+        uniform float uIor;
+        uniform float uDispersion;
+        uniform vec3 uEnvLow;
+        uniform vec3 uEnvHigh;
+        uniform vec3 uKeyColor;
+        varying vec2 vState;
+
+        // Procedural stand-in for an environment map. A vertical gradient plus a soft
+        // key lobe: enough structure that a refracted direction returns something that
+        // varies, which is all the eye needs to read the surface as bending light.
+        vec3 sampleEnv( vec3 dir ) {
+          float h = dir.y * 0.5 + 0.5;
+          vec3 base = mix( uEnvLow, uEnvHigh, smoothstep( 0.0, 1.0, h ) );
+          vec3 keyDir = normalize( vec3( 0.5, 0.8, 0.35 ) );
+          float key = pow( max( dot( dir, keyDir ), 0.0 ), 8.0 );
+          return base + uKeyColor * key * 0.7;
+        }`,
       )
       .replace(
         '#include <opaque_fragment>',
         `#include <opaque_fragment>
 
-        // Fresnel: 0 facing the camera, 1 at grazing angles. The whole glass illusion.
         vec3 vnNormal = normalize( vNormal );
         vec3 vnView = normalize( vViewPosition );
+
+        // Fresnel: 0 facing the camera, 1 at grazing angles.
         float fresnel = pow( 1.0 - saturate( dot( vnNormal, vnView ) ), uRimPower );
+
+        // View space -> world space. The view rotation is orthonormal, so its transpose
+        // is its inverse — far cheaper than inverting a mat4, and it means the
+        // environment stays fixed in the world while the camera drifts through it.
+        mat3 viewToWorld = transpose( mat3( viewMatrix ) );
+
+        vec3 incident = -vnView;
+        // Per-channel IOR is the whole trick behind the colour fringing at the edges.
+        vec3 refrR = viewToWorld * refract( incident, vnNormal, uIor - uDispersion );
+        vec3 refrG = viewToWorld * refract( incident, vnNormal, uIor );
+        vec3 refrB = viewToWorld * refract( incident, vnNormal, uIor + uDispersion );
+        vec3 refracted = vec3(
+          sampleEnv( refrR ).r,
+          sampleEnv( refrG ).g,
+          sampleEnv( refrB ).b
+        );
+
+        vec3 reflected = sampleEnv( viewToWorld * reflect( incident, vnNormal ) );
+
+        // Face-on reads as looking THROUGH the node; grazing reads as reflecting off it.
+        vec3 glass = mix( refracted, reflected, fresnel );
+        gl_FragColor.rgb = mix( gl_FragColor.rgb, gl_FragColor.rgb * 0.35 + glass, uRefraction );
 
         float hover = vState.x;
         float selected = vState.y;
         // Deliberately NOT named "active": that is a RESERVED WORD in GLSL ES and
         // fails to compile with "Illegal use of reserved word". Same applies to
-        // input, output, filter, sample, and partition.
+        // input, output, filter, sample, and partition -- avoid all of them here.
         float activation = max( hover, selected );
 
         // Selected nodes breathe slowly. Hover does not — a pulse on something that
@@ -142,24 +190,16 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
         float rim = fresnel * uRimStrength * ( 1.0 + activation * 1.6 ) * pulse;
         gl_FragColor.rgb += uRimColor * rim;
 
-        // Active nodes gain interior fill so they read as solid glass rather than an
-        // empty shell — this is what visually separates them from the transparent cloud.
+        // Active nodes gain interior fill, so they read as lit from within rather than
+        // merely outlined — this is what separates them from the surrounding cloud.
         gl_FragColor.rgb += uRimColor * activation * 0.35;
 
-        float alpha = saturate( uBaseAlpha + fresnel * ( 1.0 - uBaseAlpha ) );
-        alpha = saturate( alpha + activation * 0.45 );
-
         // Contrast is relative: rather than over-brightening one node (which fights the
-        // bloom pass on dark and is impossible on light), everything NOT active fades.
-        float dim = mix( uDim, 1.0, activation );
-
-        gl_FragColor.rgb *= dim;
-        gl_FragColor.a *= alpha * dim;`,
+        // bloom pass on dark and is impossible on light), everything else fades.
+        gl_FragColor.rgb *= mix( uDim, 1.0, activation );`,
       );
   };
 
-  // Changing onBeforeCompile after first compile requires a recompile; this material is
-  // rebuilt on theme change instead, so the key just needs to differ per theme.
   material.customProgramCacheKey = () => `node-glass-${palette.theme}`;
 
   return { material, uniforms };

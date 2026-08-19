@@ -17,9 +17,11 @@ import styles from './SceneCanvas.module.css';
 // Both the Canvas and the scene graph live behind this boundary — importing R3F at the
 // top level would pull Three.js into the entry chunk and defeat the split.
 const LazyScene = lazy(async () => {
-  const [{ Canvas }, { Scene }] = await Promise.all([
+  const [{ Canvas }, { Scene }, { useSceneStore }, { isUiTarget }] = await Promise.all([
     import('@react-three/fiber'),
     import('./Scene.tsx'),
+    import('../store/sceneStore.ts'),
+    import('./pointerGuard.ts'),
   ]);
 
   return {
@@ -38,6 +40,23 @@ const LazyScene = lazy(async () => {
           // events on the meshes themselves (§4.6).
           eventSource={document.body}
           eventPrefix="client"
+          /*
+           * Click-outside-to-close for the Code Inspector.
+           *
+           * The panel is non-modal and its backdrop is pointer-events: none, so there is
+           * no overlay left to catch stray clicks. `onPointerMissed` fires only when a
+           * click hits NO object in the scene — so clicking another node still selects
+           * it, and only clicking genuinely empty space dismisses the panel.
+           *
+           * The UI guard is still needed: eventSource is document.body, so a click on a
+           * button counts as "missed" by the raycaster and would otherwise close the
+           * panel behind the visitor's back.
+           */
+          onPointerMissed={(event) => {
+            if (isUiTarget(event)) return;
+            const { inspectorNodeId, closeInspector } = useSceneStore.getState();
+            if (inspectorNodeId) closeInspector();
+          }}
         >
           <Scene />
         </Canvas>

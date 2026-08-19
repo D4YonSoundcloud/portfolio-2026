@@ -67,28 +67,13 @@ export function CodeInspectorPanel(): ReactNode {
     const panel = panelRef.current;
     panel?.focus();
 
+    // Escape closes. There is deliberately no Tab trap: a focus trap belongs to a modal
+    // dialog, and this panel is not one — trapping Tab here would make the settings
+    // menu and section navigation unreachable while a snippet is open.
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
         event.stopPropagation();
         closeInspector();
-        return;
-      }
-
-      if (event.key !== 'Tab' || !panel) return;
-
-      const focusable = panel.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
       }
     };
 
@@ -113,15 +98,18 @@ export function CodeInspectorPanel(): ReactNode {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: reducedMotion ? 0 : 0.18 }}
-            onClick={closeInspector}
             aria-hidden="true"
           />
 
+          {/*
+            Deliberately NOT aria-modal: the scene behind this panel stays interactive
+            (hover, select, wheel-traverse), so claiming modality would misdescribe the
+            panel to assistive tech — and would imply a focus trap that is not there.
+          */}
           <motion.div
             ref={panelRef}
             className={styles.panel}
             role="dialog"
-            aria-modal="true"
             aria-label="Source code inspector"
             tabIndex={-1}
             initial={reducedMotion ? { opacity: 0 } : isSheet ? { opacity: 0, y: 32 } : { opacity: 0, x: 24 }}

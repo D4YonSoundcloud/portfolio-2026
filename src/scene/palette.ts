@@ -29,8 +29,11 @@ export interface ScenePalette {
   emissiveIntensity: number;
   edgeOpacity: number;
   nodeScale: number;
-  /** Base opacity of the glass node material before the Fresnel term. */
-  glassAlpha: number;
+  /** How strongly the faked refraction replaces the lit base colour. */
+  refraction: number;
+  /** Low and high ends of the procedural environment the refraction samples. */
+  envLow: Color;
+  envHigh: Color;
   /** Fresnel rim intensity. */
   rimStrength: number;
   /** Multiplier applied to non-active nodes while something is hovered or selected. */
@@ -74,7 +77,9 @@ export function readPalette(theme: ResolvedTheme): ScenePalette {
     emissiveIntensity: readNumber(styles, '--scene-emissive', theme === 'dark' ? 0.85 : 0),
     edgeOpacity: readNumber(styles, '--scene-edge-opacity', 0.18),
     nodeScale: readNumber(styles, '--scene-node-scale', 1),
-    glassAlpha: readNumber(styles, '--scene-glass-alpha', theme === 'dark' ? 0.16 : 0.42),
+    refraction: readNumber(styles, '--scene-refraction', theme === 'dark' ? 0.72 : 0.5),
+    envLow: new Color(readVar(styles, '--scene-env-low', theme === 'dark' ? '#0d1117' : '#c9c6bd')),
+    envHigh: new Color(readVar(styles, '--scene-env-high', theme === 'dark' ? '#5a6478' : '#ffffff')),
     rimStrength: readNumber(styles, '--scene-rim-strength', theme === 'dark' ? 0.85 : 0.4),
     dim: readNumber(styles, '--scene-dim', theme === 'dark' ? 0.42 : 0.3),
     fog: new Color(readVar(styles, '--scene-bg-fog', theme === 'dark' ? '#0b0d10' : '#e8e6df')),
@@ -93,7 +98,9 @@ function fallbackPalette(theme: ResolvedTheme): ScenePalette {
     emissiveIntensity: theme === 'dark' ? 0.85 : 0,
     edgeOpacity: theme === 'dark' ? 0.17 : 0.32,
     nodeScale: theme === 'dark' ? 1 : 0.72,
-    glassAlpha: theme === 'dark' ? 0.16 : 0.42,
+    refraction: theme === 'dark' ? 0.72 : 0.5,
+    envLow: new Color(theme === 'dark' ? '#0d1117' : '#c9c6bd'),
+    envHigh: new Color(theme === 'dark' ? '#5a6478' : '#ffffff'),
     rimStrength: theme === 'dark' ? 0.85 : 0.4,
     dim: theme === 'dark' ? 0.42 : 0.3,
     fog: new Color(theme === 'dark' ? '#0b0d10' : '#e8e6df'),
