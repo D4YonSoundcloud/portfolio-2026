@@ -39,9 +39,8 @@ export const profile = {
   location: 'Orlando, FL, USA',
   email: 'mattd4y@gmail.com',
   links: [
-    { label: 'GitHub', href: 'https://github.com/example' },
-    { label: 'Writing', href: 'https://example.com/writing' },
-    { label: 'LinkedIn', href: 'https://linkedin.com/in/example' },
+    { label: 'GitHub', href: 'https://d4yonsoundcloud.github.io/portfolio-2026' },
+    { label: 'LinkedIn', href: 'https://www.linkedin.com/in/matthew-day-developer/' },
   ],
 } as const;
 
@@ -64,8 +63,8 @@ export const about = {
 /** §5 item 3 — real specifics. Problem, constraints, decisions, outcome. */
 export const projects: readonly Project[] = [
   {
-    name: 'Ledger read path',
-    context: 'Transaction history for a payments product, ~2B rows.',
+    name: 'T.R.I.D.E.N.T',
+    context: 'Large Excel Sheet custom made UI with by-cell context aware LLM usage. 50,000+ Cells.',
     problem:
       'The account history endpoint had drifted to a p99 of 9.4s. It was the first screen after login, so it was effectively the product’s load time.',
     constraint:
@@ -73,11 +72,11 @@ export const projects: readonly Project[] = [
     decision:
       'Rather than rewrite the endpoint, I traced it to a keyset-pagination bug where an OR predicate defeated the composite index. Fixed the predicate, added a covering index, and put a 30-second read-through cache in front of the first page only — the page 96% of sessions never leave.',
     outcome: 'p99 to 340ms. Two files changed, no migration, no rewrite.',
-    stack: ['Postgres', 'Go', 'Redis'],
+    stack: ['React', 'Python', 'SQlite'],
   },
   {
-    name: 'Build pipeline triage',
-    context: 'CI for a 40-engineer monorepo.',
+    name: 'Ember',
+    context: 'Red Meters on-device front-end for viewing live sensor data from the Red Meter itself.',
     problem:
       'A 41-minute median CI run meant people batched work into large PRs to avoid waiting, which made review worse and made failures harder to attribute.',
     constraint:
@@ -86,11 +85,11 @@ export const projects: readonly Project[] = [
       'Instrumented the runner before touching anything. 60% of wall-clock time was Docker layer rebuilds triggered by a lockfile write in a postinstall script. Pinned it, split the suite by historical runtime rather than by directory, and made integration tests run only against changed packages.',
     outcome:
       'Median run to 7 minutes. PR size fell by about half over the next quarter, which was the actual goal.',
-    stack: ['Buildkite', 'Docker', 'Bazel'],
+    stack: ['Vue', 'D3', 'Python'],
   },
   {
-    name: 'Search relevance rollback',
-    context: 'Internal document search, ~500k documents.',
+    name: 'Coaster Clash 2k99',
+    context: 'The game I wanted to play, did not exist. So I created it.',
     problem:
       'A new embedding model shipped with better offline benchmarks and measurably worse user behaviour — clicks moved down the results page.',
     constraint:
@@ -99,7 +98,7 @@ export const projects: readonly Project[] = [
       'Built a small side-by-side evaluation harness using logged queries and actual click positions rather than the offline set. It showed the new model won on paraphrase and lost badly on exact-name lookup, which was 70% of real traffic. Proposed routing by query shape instead of picking a winner.',
     outcome:
       'Kept both. Exact-name queries route to the lexical index, everything else to embeddings. Click-through recovered and passed the old baseline.',
-    stack: ['Python', 'OpenSearch', 'pgvector'],
+    stack: ['Typescript', 'ThreeJs', 'Vue', 'Tauri'],
   },
 ];
 
