@@ -12,7 +12,7 @@ import { SECTIONS } from '../sections/sections.ts';
  * <Canvas> boundary — R3F reconciles into its own tree (§2, §3).
  */
 
-export type TransitionMode = 'horizontal' | 'vertical' | 'off';
+export type TransitionMode = 'vertical' | 'horizontal' | 'off';
 export type ThemeMode = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 export type Quality = 'high' | 'medium' | 'low';
@@ -127,7 +127,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     ? 'off'
     : readStored<TransitionMode>(
         TRANSITION_KEY,
-        ['horizontal', 'vertical', 'off'],
+        ['vertical', 'horizontal', 'off'],
         'vertical',
       ),
 
