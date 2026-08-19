@@ -56,7 +56,7 @@ export const about = {
     { key: 'Currently', value: 'Senior Engineer, Consultant' },
     { key: 'Based in', value: profile.location },
     { key: 'Working in', value: 'TypeScript, React, Node + many more' },
-    { key: 'Open to', value: 'Mid/Senior Level IC roles + Consultancing' },
+    { key: 'Open to', value: 'Mid/Senior Level IC roles + Consulting' },
   ],
 } as const;
 

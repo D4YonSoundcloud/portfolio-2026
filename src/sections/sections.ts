@@ -21,7 +21,7 @@ export interface SectionDef {
 export const SECTIONS = [
   {
     id: 'hero',
-    label: '// index',
+    label: '// intro',
     announceLabel: 'Introduction',
     clusterPath: 'src/App.tsx',
   },
@@ -32,16 +32,16 @@ export const SECTIONS = [
     clusterPath: 'src/design',
   },
   {
-    id: 'projects',
-    label: '// projects',
-    announceLabel: 'Projects',
-    clusterPath: 'src/scene',
-  },
-  {
     id: 'experience',
     label: '// experience',
     announceLabel: 'Experience',
     clusterPath: 'src/ast-pipeline',
+  },
+  {
+    id: 'projects',
+    label: '// projects',
+    announceLabel: 'Projects',
+    clusterPath: 'src/scene',
   },
   {
     id: 'contact',

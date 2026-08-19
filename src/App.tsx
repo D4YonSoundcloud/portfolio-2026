@@ -43,8 +43,8 @@ export function App(): ReactNode {
           {[
             <Hero key="hero" />,
             <About key="about" />,
-            <Projects key="projects" />,
             <Experience key="experience" />,
+            <Projects key="projects" />,
             <Contact key="contact" />,
           ]}
         </FocusTrack>

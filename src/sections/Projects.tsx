@@ -15,7 +15,7 @@ import styles from './Projects.module.css';
  */
 export function Projects(): ReactNode {
   return (
-    <SectionShell index={2} wide>
+    <SectionShell index={3} wide>
       <ol className={styles.list}>
         {projects.map((project) => (
           <li key={project.name} className={styles.project}>

@@ -128,7 +128,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
     : readStored<TransitionMode>(
         TRANSITION_KEY,
         ['horizontal', 'vertical', 'off'],
-        'horizontal',
+        'vertical',
       ),
 
   themeMode: readStored<ThemeMode>(THEME_KEY, ['dark', 'light', 'system'], 'system'),

@@ -13,7 +13,7 @@ import styles from './Experience.module.css';
  */
 export function Experience(): ReactNode {
   return (
-    <SectionShell index={3}>
+    <SectionShell index={2}>
       <ol className={styles.timeline}>
         {experience.map((role) => (
           <li key={`${role.org}-${role.period}`} className={styles.role}>
