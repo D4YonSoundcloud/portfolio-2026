@@ -9,10 +9,11 @@
   "scripts": {
     "generate:ast": "tsx src/ast-pipeline/generate-ast-graph.ts",
     "check:ast-scope": "tsx scripts/check-ast-scope.ts",
+    "check:no-editor": "tsx scripts/check-no-editor.ts",
     "predev": "npm run generate:ast",
     "dev": "vite",
     "prebuild": "npm run generate:ast",
-    "build": "tsc -b && vite build && npm run prerender",
+    "build": "tsc -b && vite build && npm run prerender && npm run check:no-editor",
     "prerender": "tsx scripts/prerender.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b",

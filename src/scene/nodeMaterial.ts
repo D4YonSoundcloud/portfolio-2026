@@ -1,6 +1,7 @@
 import { Color, MeshPhysicalMaterial, NormalBlending, type IUniform } from 'three';
 
 import type { ScenePalette } from './palette.ts';
+import type { SharedValues, ThemedValues } from './sceneConfig.ts';
 
 /**
  * The node material — opaque, with faked refraction.
@@ -31,7 +32,20 @@ import type { ScenePalette } from './palette.ts';
  * ── Interaction state ────────────────────────────────────────────────────────────────
  * `aState` is a per-instance vec2 (hover, selected), each 0→1, animated in AstNodes.
  * Keeping it an instanced attribute is what lets one node in a batch of hundreds light
- * up without breaking the single draw call. The hover behaviour is unchanged.
+ * up without breaking the single draw call.
+ *
+ * ── Everything tunable is live ───────────────────────────────────────────────────────
+ * Every value the editor exposes here is either a uniform or a plain material property,
+ * so `syncNodeMaterial` can push a change without recompiling the shader. That is not an
+ * accident of the list — values which WOULD force a recompile (`blending`, `transparent`,
+ * `toneMapped`, and the `onBeforeCompile` source itself) are deliberately left out of the
+ * config. They are structural decisions about how the material works rather than knobs,
+ * and exposing them would put a several-hundred-millisecond shader rebuild behind a
+ * slider drag.
+ *
+ * Three values that were previously hardcoded in GLSL — the two interaction swells and
+ * the environment key gain — are now uniforms for exactly this reason: they are look
+ * decisions, and a uniform costs nothing.
  */
 
 export interface NodeMaterialUniforms {
@@ -50,6 +64,11 @@ export interface NodeMaterialUniforms {
   uEnvLow: IUniform<Color>;
   uEnvHigh: IUniform<Color>;
   uKeyColor: IUniform<Color>;
+  /** Brightness of the key lobe in the procedural environment. */
+  uEnvKeyGain: IUniform<number>;
+  /** How far a hovered / selected instance expands along its normals. */
+  uHoverSwell: IUniform<number>;
+  uSelectSwell: IUniform<number>;
 }
 
 export interface NodeMaterial {
@@ -57,7 +76,12 @@ export interface NodeMaterial {
   uniforms: NodeMaterialUniforms;
 }
 
-export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMaterial {
+export function createNodeMaterial(
+  color: Color,
+  palette: ScenePalette,
+  themed: ThemedValues,
+  shared: SharedValues,
+): NodeMaterial {
   const dark = palette.theme === 'dark';
 
   const uniforms: NodeMaterialUniforms = {
@@ -65,13 +89,16 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
     uTime: { value: 0 },
     uRimColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.55) : color.clone() },
     uRimStrength: { value: palette.rimStrength },
-    uRimPower: { value: dark ? 2.4 : 3.1 },
+    uRimPower: { value: themed.material.rimPower },
     uRefraction: { value: palette.refraction },
-    uIor: { value: 0.72 },
-    uDispersion: { value: dark ? 0.035 : 0.022 },
+    uIor: { value: shared.material.ior },
+    uDispersion: { value: themed.material.dispersion },
     uEnvLow: { value: palette.envLow.clone() },
     uEnvHigh: { value: palette.envHigh.clone() },
     uKeyColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.7) : color.clone() },
+    uEnvKeyGain: { value: shared.material.envKeyGain },
+    uHoverSwell: { value: shared.material.hoverSwell },
+    uSelectSwell: { value: shared.material.selectSwell },
   };
 
   const material = new MeshPhysicalMaterial({
@@ -79,11 +106,11 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
     emissive: color,
     // Emissive stays low: the refraction and rim carry the look now, and a strong
     // emissive flattens the Fresnel gradient that makes the facets read.
-    emissiveIntensity: palette.emissiveIntensity * 0.25,
-    roughness: dark ? 0.22 : 0.5,
+    emissiveIntensity: palette.emissiveIntensity * shared.material.emissiveScale,
+    roughness: themed.material.roughness,
     metalness: 0,
     // Frosted rather than polished: a broad specular lobe, not a mirror highlight.
-    sheen: dark ? 0.5 : 0.2,
+    sheen: themed.material.sheen,
     sheenColor: color.clone().lerp(new Color('#ffffff'), 0.4),
     sheenRoughness: 0.75,
 
@@ -104,7 +131,9 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
         '#include <common>',
         `#include <common>
         attribute vec2 aState;
-        varying vec2 vState;`,
+        varying vec2 vState;
+        uniform float uHoverSwell;
+        uniform float uSelectSwell;`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -113,7 +142,7 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
         // Expand along the normal rather than rewriting instanceMatrix — the LOD pass
         // already owns those matrices, and fighting it would make the two effects
         // stomp on each other every frame.
-        transformed += normal * (vState.x * 0.16 + vState.y * 0.30);`,
+        transformed += normal * ( vState.x * uHoverSwell + vState.y * uSelectSwell );`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -131,6 +160,7 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
         uniform vec3 uEnvLow;
         uniform vec3 uEnvHigh;
         uniform vec3 uKeyColor;
+        uniform float uEnvKeyGain;
         varying vec2 vState;
 
         // Procedural stand-in for an environment map. A vertical gradient plus a soft
@@ -141,7 +171,7 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
           vec3 base = mix( uEnvLow, uEnvHigh, smoothstep( 0.0, 1.0, h ) );
           vec3 keyDir = normalize( vec3( 0.5, 0.8, 0.35 ) );
           float key = pow( max( dot( dir, keyDir ), 0.0 ), 8.0 );
-          return base + uKeyColor * key * 0.7;
+          return base + uKeyColor * key * uEnvKeyGain;
         }`,
       )
       .replace(
@@ -203,4 +233,33 @@ export function createNodeMaterial(color: Color, palette: ScenePalette): NodeMat
   material.customProgramCacheKey = () => `node-glass-${palette.theme}`;
 
   return { material, uniforms };
+}
+
+/**
+ * Pushes config changes onto an already-built material, without recompiling.
+ *
+ * Called from an effect in `AstNodes` whenever the config revision changes. In
+ * production the config never changes, so this runs exactly once per material and is
+ * a no-op restatement of what `createNodeMaterial` already set.
+ *
+ * `uDim` and `uTime` are pointedly NOT touched here: they are animated in the frame
+ * loop, and overwriting them from an effect would visibly reset the dim ramp every time
+ * a slider moved.
+ */
+export function syncNodeMaterial(
+  { material, uniforms }: NodeMaterial,
+  palette: ScenePalette,
+  themed: ThemedValues,
+  shared: SharedValues,
+): void {
+  material.roughness = themed.material.roughness;
+  material.sheen = themed.material.sheen;
+  material.emissiveIntensity = palette.emissiveIntensity * shared.material.emissiveScale;
+
+  uniforms.uRimPower.value = themed.material.rimPower;
+  uniforms.uDispersion.value = themed.material.dispersion;
+  uniforms.uIor.value = shared.material.ior;
+  uniforms.uEnvKeyGain.value = shared.material.envKeyGain;
+  uniforms.uHoverSwell.value = shared.material.hoverSwell;
+  uniforms.uSelectSwell.value = shared.material.selectSwell;
 }

@@ -1,0 +1,356 @@
+/**
+ * Scene editor styling.
+ *
+ * EDITOR ONLY. Reuses the site's own tokens rather than declaring a second visual
+ * language — partly so the panel reads as part of the project, and partly because a
+ * panel with its own hardcoded colours is a panel that lies to you about contrast the
+ * moment you switch themes while tuning.
+ *
+ * Sits at `--z-inspector` + 1: above everything including the Code Inspector, because
+ * you frequently need both open to see how a selection reads against the field.
+ */
+
+.panel {
+  /*
+   * Sentinel for scripts/check-no-editor.ts. Not decorative and not read by anything.
+   *
+   * A stylesheet import is a SIDE EFFECT, so bundlers never tree-shake it: if a future
+   * refactor hoists the editor import out of its guarded branch, the JavaScript may
+   * still vanish but this CSS will ship regardless. That is the failure mode most likely
+   * to go unnoticed, so the check needs something in here to grep for.
+   *
+   * A custom property rather than a comment or a class name: comments are stripped by
+   * the minifier and generated class names depend on Vite's CSS-module scoping format,
+   * which is not ours to rely on. Custom properties survive both intact.
+   */
+  --scene-editor-marker: 1;
+
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: calc(var(--z-inspector) + 1);
+
+  display: flex;
+  flex-direction: column;
+  width: 330px;
+  max-width: calc(100vw - var(--space-6));
+
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  color: var(--text);
+
+  border: var(--rule-width) solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--rule-width) solid var(--rule);
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--step-0);
+  font-weight: 400;
+  letter-spacing: var(--tracking-label);
+}
+
+.themeTag {
+  font-size: var(--step--1);
+  color: var(--accent);
+}
+
+.iconButton {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: none;
+}
+
+.iconButton:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+/* ── Reopen tab ─────────────────────────────────────────────────────────────────── */
+
+.reopen {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: calc(var(--z-inspector) + 1);
+
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-dim);
+
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.reopen:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+/* ── Scene overrides ────────────────────────────────────────────────────────────── */
+
+.overrides {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--rule-width) solid var(--rule);
+}
+
+.warning {
+  padding: var(--space-2);
+  text-align: left;
+  line-height: 1.4;
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--accent);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rowLabel {
+  color: var(--text-dim);
+}
+
+.segments {
+  display: flex;
+  margin-left: auto;
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segment {
+  padding: 2px var(--space-2);
+  font-family: inherit;
+  font-size: var(--step--1);
+  color: var(--text-faint);
+  border: none;
+  background: none;
+}
+
+.segment[aria-pressed='true'] {
+  color: var(--bg);
+  background: var(--text-dim);
+}
+
+.pin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-faint);
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────────────── */
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.section + .section {
+  margin-top: var(--space-5);
+}
+
+.sectionTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 var(--space-3);
+  font-size: var(--step--1);
+  font-weight: 400;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.sectionNote {
+  font-size: var(--step--1);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+}
+
+.group + .group {
+  margin-top: var(--space-2);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-1) 0;
+  font-family: inherit;
+  font-size: var(--step--1);
+  color: var(--text-dim);
+  text-align: left;
+  border: none;
+  border-bottom: var(--rule-width) solid var(--rule);
+  background: none;
+}
+
+.groupHeader:hover {
+  color: var(--text);
+}
+
+.groupBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────────────── */
+
+/*
+ * Three columns: label, slider, exact value. Fixed label and value widths so every row
+ * in a group aligns — a column of sliders that start at different x positions is
+ * genuinely harder to scan for the one you want.
+ */
+.control {
+  display: grid;
+  grid-template-columns: 92px 1fr 54px;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  cursor: help;
+}
+
+/* An overridden field is visibly different from a default one, so at a glance you can
+ * tell what this session actually changed. */
+.control[data-overridden] .label {
+  color: var(--accent);
+}
+
+.revert {
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--accent);
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.range {
+  width: 100%;
+  height: 2px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.number,
+.hex {
+  width: 100%;
+  padding: 2px 4px;
+  font-family: var(--font-code);
+  font-size: 11px;
+  color: var(--text);
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.number:focus,
+.hex:focus {
+  outline: 1px solid var(--focus-ring);
+  border-color: transparent;
+}
+
+.color {
+  width: 100%;
+  height: 18px;
+  padding: 0;
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: none;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────────────── */
+
+.footer {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--rule-width) solid var(--rule);
+}
+
+.button,
+.primary {
+  flex: 1;
+  padding: var(--space-2);
+  font-family: inherit;
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-dim);
+}
+
+.primary {
+  color: var(--bg);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+.button:disabled,
+.primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* §8.1 — the panel is a desktop tool, but tuning on a real phone is exactly when you
+ * need it most, so it becomes a bottom sheet rather than disappearing. */
+@media (max-width: 767px) {
+  .panel {
+    inset: auto 0 0 0;
+    width: auto;
+    max-height: 62dvh;
+  }
+}

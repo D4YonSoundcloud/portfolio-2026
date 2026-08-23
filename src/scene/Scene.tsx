@@ -10,6 +10,7 @@ import { NodeTooltip } from './NodeTooltip.tsx';
 import { SelectionOverlay } from './SelectionOverlay.tsx';
 import { TreeTraversal } from './TreeTraversal.tsx';
 import { readPalette } from './palette.ts';
+import { useSceneConfig } from './sceneConfig.ts';
 import { useAstGraph } from './useAstGraph.ts';
 import { useSceneStore } from '../store/sceneStore.ts';
 
@@ -19,20 +20,36 @@ import { useSceneStore } from '../store/sceneStore.ts';
  * Everything here reads from the Zustand store rather than props passed across the
  * Canvas boundary (§3, §6): the two render trees share state exclusively through the
  * store, never through prop drilling or Context.
+ *
+ * Numeric render inputs come from `sceneConfig.ts` rather than being written inline as
+ * JSX props, so they are discoverable in one place and editable at runtime by the dev
+ * editor. In production the config is a frozen constant and this is a plain read.
  */
 export function Scene(): ReactNode {
   const prepared = useAstGraph();
   const resolvedTheme = useSceneStore((s) => s.resolvedTheme);
   const quality = useSceneStore((s) => s.quality);
   const setQuality = useSceneStore((s) => s.setQuality);
+  const qualityPinned = useSceneStore((s) => s.qualityPinned);
   const inspectorNodeId = useSceneStore((s) => s.inspectorNodeId);
 
-  // Re-read on theme change only — getComputedStyle forces a style recalc and must
-  // never run in the frame loop (§7.2).
+  const config = useSceneConfig();
+  const themed = config.themed[resolvedTheme];
+  const shared = config.shared;
+
+  /**
+   * Re-read on theme change only — `getComputedStyle` forces a style recalc and must
+   * never run in the frame loop (§7.2).
+   *
+   * `config.revision` joins the dependency list purely for the editor: writing a token
+   * override sets an inline custom property on <html>, which the palette has no other
+   * way of noticing. The revision is frozen at 0 in production, so this stays a
+   * theme-change-only read there.
+   */
   const [palette, setPalette] = useState(() => readPalette(resolvedTheme));
   useEffect(() => {
     setPalette(readPalette(resolvedTheme));
-  }, [resolvedTheme]);
+  }, [resolvedTheme, config.revision]);
 
   // Position of the node open in the inspector, so the camera can frame it clear of
   // the panel. Null whenever the panel is closed.
@@ -48,9 +65,12 @@ export function Scene(): ReactNode {
     <>
       {/* §4.4 — lit minimally: one ambient plus one point light. The nodes' emissive
           does most of the work on dark; on light the ambient carries it. */}
-      <ambientLight intensity={palette.theme === 'dark' ? 0.7 : 1.15} />
-      <pointLight position={[30, 40, 50]} intensity={palette.theme === 'dark' ? 1.1 : 0.5} />
-      <fog attach="fog" args={[palette.fog.getHex(), 20, 190]} />
+      <ambientLight intensity={themed.lights.ambientIntensity} />
+      <pointLight
+        position={[shared.lights.keyX, shared.lights.keyY, shared.lights.keyZ]}
+        intensity={themed.lights.keyIntensity}
+      />
+      <fog attach="fog" args={[palette.fog.getHex(), shared.fog.near, shared.fog.far]} />
 
       <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
 
@@ -72,11 +92,18 @@ export function Scene(): ReactNode {
       {/*
         §8.3 — PerformanceMonitor fine-tunes upward from the boot-seeded quality tier
         rather than starting high and downgrading after a janky first few seconds.
+
+        Skipped entirely while quality is pinned: the editor needs to hold a tier still
+        to inspect it, and a monitor that quietly promotes 'low' back to 'high' after
+        two smooth seconds makes that impossible. `qualityPinned` is false in every
+        normal session.
       */}
-      <PerformanceMonitor
-        onIncline={() => setQuality(quality === 'low' ? 'medium' : 'high')}
-        onDecline={() => setQuality(quality === 'high' ? 'medium' : 'low')}
-      />
+      {qualityPinned ? null : (
+        <PerformanceMonitor
+          onIncline={() => setQuality(quality === 'low' ? 'medium' : 'high')}
+          onDecline={() => setQuality(quality === 'high' ? 'medium' : 'low')}
+        />
+      )}
 
       {/*
         §4.4 / §7.2 — the render pipeline is theme-conditional, not a colour swap.
@@ -89,18 +116,15 @@ export function Scene(): ReactNode {
         <EffectComposer enableNormalPass={false}>
           {palette.useBloom ? (
             <Bloom
-              // Threshold raised from 0.32: the glass material's Fresnel rims are bright
-              // at grazing angles on every one of ~2600 nodes, and at the old threshold
-              // the whole cloud blooms into a haze instead of the rims reading as edges.
-              intensity={0.32}
-              luminanceThreshold={0.1}
-              luminanceSmoothing={0.9}
+              intensity={themed.bloom.intensity}
+              luminanceThreshold={themed.bloom.threshold}
+              luminanceSmoothing={themed.bloom.smoothing}
               mipmapBlur
             />
           ) : (
             // Light theme: a quiet vignette in place of bloom, so the linework at the
             // edges recedes without any glow.
-            <Vignette offset={0.35} darkness={0.28} />
+            <Vignette offset={themed.vignette.offset} darkness={themed.vignette.darkness} />
           )}
         </EffectComposer>
       ) : null}

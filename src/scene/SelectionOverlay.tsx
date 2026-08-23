@@ -4,6 +4,7 @@ import { AdditiveBlending, NormalBlending, Vector3, type Group, type Mesh } from
 
 import type { AstGraph } from '../ast-pipeline/schema.ts';
 import type { ScenePalette } from './palette.ts';
+import { readSceneConfig, useSceneConfig } from './sceneConfig.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 
 /**
@@ -36,6 +37,12 @@ export function SelectionOverlay({ graph, palette }: SelectionOverlayProps): Rea
   const shellRef = useRef<Mesh>(null);
   const scale = useRef(0);
 
+  // Geometry args are React props, so these come through the subscribing hook; the spin
+  // rates and grow attack are read per-frame instead.
+  const config = useSceneConfig();
+  const themed = config.themed[palette.theme];
+  const { ringInner, ringOuter, shellRadius } = config.shared.selection;
+
   const node = useMemo(
     () => (inspectorNodeId ? graph.nodes.find((n) => n.id === inspectorNodeId) : undefined),
     [inspectorNodeId, graph.nodes],
@@ -59,6 +66,8 @@ export function SelectionOverlay({ graph, palette }: SelectionOverlayProps): Rea
     const group = groupRef.current;
     if (!group || !position) return;
 
+    const { selection } = readSceneConfig().shared;
+
     group.position.copy(position);
     // Billboard the ring only — the shell reads better with its own rotation.
     ringRef.current?.quaternion.copy(camera.quaternion);
@@ -66,12 +75,12 @@ export function SelectionOverlay({ graph, palette }: SelectionOverlayProps): Rea
     if (shellRef.current) {
       const { reducedMotion } = readSceneStore();
       if (!reducedMotion) {
-        shellRef.current.rotation.y = clock.elapsedTime * 0.35;
-        shellRef.current.rotation.x = clock.elapsedTime * 0.18;
+        shellRef.current.rotation.y = clock.elapsedTime * selection.spinY;
+        shellRef.current.rotation.x = clock.elapsedTime * selection.spinX;
       }
     }
 
-    scale.current += (1 - scale.current) * Math.min(1, delta / 0.2);
+    scale.current += (1 - scale.current) * Math.min(1, delta / selection.growAttack);
     group.scale.setScalar(scale.current);
   });
 
@@ -80,11 +89,13 @@ export function SelectionOverlay({ graph, palette }: SelectionOverlayProps): Rea
   return (
     <group ref={groupRef}>
       <mesh ref={ringRef}>
-        <ringGeometry args={[1.5, 1.72, 48]} />
+        {/* Inner is clamped below outer: the editor can drag them past each other, and
+            an inverted ring renders as an invisible degenerate annulus. */}
+        <ringGeometry args={[Math.min(ringInner, ringOuter - 0.01), ringOuter, 48]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={dark ? 0.85 : 0.7}
+          opacity={themed.selection.ringOpacity}
           blending={dark ? AdditiveBlending : NormalBlending}
           depthWrite={false}
           depthTest={false}
@@ -93,12 +104,12 @@ export function SelectionOverlay({ graph, palette }: SelectionOverlayProps): Rea
       </mesh>
 
       <mesh ref={shellRef}>
-        <icosahedronGeometry args={[1.05, 0]} />
+        <icosahedronGeometry args={[shellRadius, 0]} />
         <meshBasicMaterial
           color={color}
           wireframe
           transparent
-          opacity={dark ? 0.5 : 0.42}
+          opacity={themed.selection.shellOpacity}
           blending={dark ? AdditiveBlending : NormalBlending}
           depthWrite={false}
           toneMapped={dark}

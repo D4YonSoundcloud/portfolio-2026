@@ -39,6 +39,11 @@ export interface SceneStore {
   inspectorNodeId: string | null;
   reducedMotion: boolean;
   quality: Quality;
+  /**
+   * Freezes `quality` against `PerformanceMonitor`, which otherwise re-tiers on its own
+   * schedule. Only the dev scene editor sets this; it is false in every normal session.
+   */
+  qualityPinned: boolean;
   isCoarsePointer: boolean;
   /** Deepest AST level rendered. Also bounds tree traversal (§4.5). */
   maxDepth: number;
@@ -54,6 +59,7 @@ export interface SceneStore {
   closeInspector: () => void;
   setReducedMotion: (value: boolean) => void;
   setQuality: (quality: Quality) => void;
+  setQualityPinned: (value: boolean) => void;
   setCoarsePointer: (value: boolean) => void;
   setMaxDepth: (depth: number) => void;
 }
@@ -137,6 +143,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   inspectorNodeId: null,
   reducedMotion,
   quality: seedQuality(),
+  qualityPinned: false,
   isCoarsePointer: isCoarsePointer(),
   maxDepth: readStoredNumber(DEPTH_KEY, MAX_DEPTH_LEVEL),
 
@@ -169,6 +176,7 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   setReducedMotion: (value) =>
     set(value ? { reducedMotion: true, transitionMode: 'off' } : { reducedMotion: false }),
   setQuality: (quality) => set({ quality }),
+  setQualityPinned: (value) => set({ qualityPinned: value }),
   setCoarsePointer: (value) => set({ isCoarsePointer: value }),
 
   setMaxDepth: (depth) => {

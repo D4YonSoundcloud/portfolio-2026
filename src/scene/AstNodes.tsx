@@ -5,9 +5,10 @@ import type { BufferGeometry, InstancedMesh } from 'three';
 
 import type { CategoryGroup } from './useAstGraph.ts';
 import type { ScenePalette } from './palette.ts';
-import { createNodeMaterial } from './nodeMaterial.ts';
+import { createNodeMaterial, syncNodeMaterial } from './nodeMaterial.ts';
 import { detailForQuality } from './geometryTiers.ts';
 import { isUiTarget } from './pointerGuard.ts';
+import { readSceneConfig, useSceneConfig } from './sceneConfig.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 
 /**
@@ -25,18 +26,6 @@ import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 const dummy = new Object3D();
 const tempMatrix = new Matrix4();
 const tempPosition = new Vector3();
-
-/** §4.5 — deeper nodes fade in only when the camera is near that cluster. */
-const LOD_NEAR = 46;
-const LOD_FAR = 92;
-const SHALLOW_DEPTH = 2;
-
-/** How often the distance-based visibility pass runs. Every frame is wasteful. */
-const LOD_INTERVAL_MS = 120;
-
-/** Seconds for a highlight to reach full strength. Snapping looks like a bug. */
-const HOVER_ATTACK = 0.14;
-const SELECT_ATTACK = 0.22;
 
 /** Below this delta a value is treated as settled and drops out of the animating set. */
 const SETTLE_EPSILON = 0.002;
@@ -59,14 +48,28 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
   const quality = useSceneStore((s) => s.quality);
   const detail = detailForQuality(tier, quality);
 
+  const config = useSceneConfig();
+  const themed = config.themed[palette.theme];
+
   /**
    * The material is rebuilt per theme, not mutated: `onBeforeCompile` bakes uniforms and
    * blend mode into a compiled program, and dark/light differ in both (§7.2).
+   *
+   * Note what is NOT in the dependency list: the material config. Every value the editor
+   * exposes is uniform- or property-backed, so changes are pushed by `syncNodeMaterial`
+   * below instead. Rebuilding here on every slider tick would trigger a shader recompile
+   * per category-tier batch and make dragging unusable.
    */
-  const { material, uniforms } = useMemo(
-    () => createNodeMaterial(color, palette),
+  const nodeMaterial = useMemo(
+    () => createNodeMaterial(color, palette, themed, config.shared),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- config changes reach the material through syncNodeMaterial below, deliberately not by rebuilding it.
     [color, palette],
   );
+  const { material, uniforms } = nodeMaterial;
+
+  useEffect(() => {
+    syncNodeMaterial(nodeMaterial, palette, themed, config.shared);
+  }, [nodeMaterial, palette, themed, config.shared]);
 
   useEffect(() => () => material.dispose(), [material]);
 
@@ -136,13 +139,15 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
     if (!mesh) return;
 
     const { hoveredNodeId, inspectorNodeId } = readSceneStore();
+    const { interaction } = readSceneConfig().shared;
 
     uniforms.uTime.value = frameState.clock.elapsedTime;
     // Dim the field only while something is actually active (see nodeMaterial: contrast
     // is produced by fading the rest, not by over-brightening the one).
     const anyActive = hoveredNodeId !== null || inspectorNodeId !== null;
     const dimTarget = anyActive ? palette.dim : 1;
-    uniforms.uDim.value += (dimTarget - uniforms.uDim.value) * Math.min(1, delta / 0.18);
+    uniforms.uDim.value +=
+      (dimTarget - uniforms.uDim.value) * Math.min(1, delta / interaction.dimAttack);
 
     // Retarget: only the two ids that can possibly be active are looked up.
     const hoverIndex = hoveredNodeId ? indexById.get(hoveredNodeId) : undefined;
@@ -167,9 +172,10 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
       const selectTarget = state.targets[i * 2 + 1] ?? 0;
 
       const nextHover =
-        hoverCurrent + (hoverTarget - hoverCurrent) * Math.min(1, delta / HOVER_ATTACK);
+        hoverCurrent + (hoverTarget - hoverCurrent) * Math.min(1, delta / interaction.hoverAttack);
       const nextSelect =
-        selectCurrent + (selectTarget - selectCurrent) * Math.min(1, delta / SELECT_ATTACK);
+        selectCurrent +
+        (selectTarget - selectCurrent) * Math.min(1, delta / interaction.selectAttack);
 
       const settled =
         Math.abs(hoverTarget - nextHover) < SETTLE_EPSILON &&
@@ -193,9 +199,16 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
     const mesh = meshRef.current;
     if (!mesh) return;
 
+    const { lod } = readSceneConfig().shared;
+
     const now = clock.elapsedTime * 1000;
-    if (now - lastLod.current < LOD_INTERVAL_MS) return;
+    if (now - lastLod.current < lod.intervalMs) return;
     lastLod.current = now;
+
+    // Guard against an inverted range: the editor can drag `far` below `near`, and the
+    // resulting divide-by-zero would write NaN into every instance matrix and blank the
+    // whole batch until reload.
+    const span = Math.max(1e-3, lod.far - lod.near);
 
     let changed = false;
     for (let i = 0; i < positions.length; i += 1) {
@@ -206,10 +219,10 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
       const baseScale = (scales[i] ?? 1) * palette.nodeScale;
       let target = baseScale;
 
-      if (node.depth > SHALLOW_DEPTH) {
+      if (node.depth > lod.shallowDepth) {
         const distance = camera.position.distanceTo(position);
         // Smoothstep between near and far rather than a hard pop.
-        const t = 1 - Math.min(1, Math.max(0, (distance - LOD_NEAR) / (LOD_FAR - LOD_NEAR)));
+        const t = 1 - Math.min(1, Math.max(0, (distance - lod.near) / span));
         target = baseScale * (t * t * (3 - 2 * t));
       }
 

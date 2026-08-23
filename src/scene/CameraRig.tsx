@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useSpring } from '@react-spring/three';
 import { Vector3 } from 'three';
 
+import { readSceneConfig, useSceneConfig } from './sceneConfig.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 import { FOCUS_SPRING } from '../navigation/FocusTrack.tsx';
 
@@ -25,24 +26,14 @@ import { FOCUS_SPRING } from '../navigation/FocusTrack.tsx';
  *
  * Note this reads `focusedIndex` from the store rather than attaching scroll listeners
  * inside the R3F tree (§4.4) — gesture translation lives in exactly one place (§5.1).
+ *
+ * ── Config access, two ways ──────────────────────────────────────────────────────────
+ * The stops need to be RECOMPUTED when `viewDistance` changes, so that comes through the
+ * subscribing `useSceneConfig` hook and lands in a `useMemo` dependency. The per-frame
+ * drift and parallax values are read with `readSceneConfig()` instead — same reasoning
+ * as `readSceneStore` below, since a subscription here would re-render this component on
+ * every config change AND defeat the render loop.
  */
-
-/** How far back from a cluster centroid the camera sits. */
-const VIEW_DISTANCE = 52;
-
-/** Amplitude of the idle drift, in world units. */
-const DRIFT_RADIUS = 3.2;
-const DRIFT_SPEED = 0.055;
-
-/** Pointer parallax offset at the screen edge. */
-const PARALLAX = 4.5;
-const PARALLAX_DAMPING = 0.045;
-
-/** How close the camera pulls in when a node is opened in the inspector. */
-const INSPECT_DISTANCE = 13;
-
-/** Seconds for the inspect framing to engage or release. */
-const INSPECT_ATTACK = 0.5;
 
 /** Matches the 767px breakpoint where the panel becomes a bottom sheet. */
 const SHEET_BREAKPOINT = 768;
@@ -58,6 +49,9 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
   const focusedIndex = useSceneStore((s) => s.focusedIndex);
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
+
+  const config = useSceneConfig();
+  const { viewDistance, inspectDistance } = config.shared.camera;
 
   const parallaxOffset = useRef(new Vector3());
   const scratch = useRef(new Vector3());
@@ -78,20 +72,20 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
       return {
         target: target.clone(),
         position: new Vector3(
-          target.x + Math.sin(angle) * VIEW_DISTANCE * 0.55,
-          target.y + Math.cos(angle * 0.7) * VIEW_DISTANCE * 0.22,
-          target.z + Math.cos(angle) * VIEW_DISTANCE * 0.62 + VIEW_DISTANCE * 0.5,
+          target.x + Math.sin(angle) * viewDistance * 0.55,
+          target.y + Math.cos(angle * 0.7) * viewDistance * 0.22,
+          target.z + Math.cos(angle) * viewDistance * 0.62 + viewDistance * 0.5,
         ),
       };
     });
-  }, [clusterTargets]);
+  }, [clusterTargets, viewDistance]);
 
   const current = stops[focusedIndex] ?? stops[0];
   const reducedMotion = useSceneStore((s) => s.reducedMotion);
   const transitionMode = useSceneStore((s) => s.transitionMode);
 
   const [spring, api] = useSpring(() => ({
-    position: current ? current.position.toArray() : [0, 0, VIEW_DISTANCE],
+    position: current ? current.position.toArray() : [0, 0, viewDistance],
     target: current ? current.target.toArray() : [0, 0, 0],
     config: FOCUS_SPRING,
   }));
@@ -115,7 +109,7 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
               .clone()
               .sub(inspectTarget)
               .normalize()
-              .multiplyScalar(INSPECT_DISTANCE),
+              .multiplyScalar(inspectDistance),
           )
       : stop.position;
     const target = inspecting ? inspectTarget : stop.target;
@@ -128,12 +122,13 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
       immediate: transitionMode === 'off' || reducedMotion,
       config: FOCUS_SPRING,
     });
-  }, [focusedIndex, stops, api, transitionMode, reducedMotion, inspectTarget]);
+  }, [focusedIndex, stops, api, transitionMode, reducedMotion, inspectTarget, inspectDistance]);
 
   useFrame((state, delta) => {
     // Read via getState, never a subscription — re-rendering this component every frame
     // would defeat the render loop entirely.
     const { reducedMotion: reduced, isCoarsePointer } = readSceneStore();
+    const { camera: cameraConfig } = readSceneConfig().shared;
     const ambient = !reduced && !isCoarsePointer;
 
     const [px, py, pz] = spring.position.get();
@@ -156,21 +151,22 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
      */
     const inspectTargetAmount = inspectTarget ? 1 : 0;
     inspectAmount.current +=
-      (inspectTargetAmount - inspectAmount.current) * Math.min(1, delta / INSPECT_ATTACK);
+      (inspectTargetAmount - inspectAmount.current) *
+      Math.min(1, delta / cameraConfig.inspectAttack);
 
     if (ambient) {
       // (2) Idle drift — a slow Lissajous nudge on top of the sprung position, so it
       // never fights the focus transition, it just breathes around wherever it lands.
-      const t = state.clock.elapsedTime * DRIFT_SPEED;
-      scratch.current.x += Math.sin(t) * DRIFT_RADIUS;
-      scratch.current.y += Math.sin(t * 1.3) * DRIFT_RADIUS * 0.6;
-      scratch.current.z += Math.cos(t * 0.8) * DRIFT_RADIUS * 0.5;
+      const t = state.clock.elapsedTime * cameraConfig.driftSpeed;
+      scratch.current.x += Math.sin(t) * cameraConfig.driftRadius;
+      scratch.current.y += Math.sin(t * 1.3) * cameraConfig.driftRadius * 0.6;
+      scratch.current.z += Math.cos(t * 0.8) * cameraConfig.driftRadius * 0.5;
 
       // (3) Pointer parallax — damped toward the pointer rather than tracking it
       // directly, so a fast mouse doesn't whip the camera.
-      const targetX = state.pointer.x * PARALLAX;
-      const targetY = state.pointer.y * PARALLAX;
-      const damping = 1 - Math.exp(-delta / PARALLAX_DAMPING);
+      const targetX = state.pointer.x * cameraConfig.parallax;
+      const targetY = state.pointer.y * cameraConfig.parallax;
+      const damping = 1 - Math.exp(-delta / cameraConfig.parallaxDamping);
       parallaxOffset.current.x += (targetX - parallaxOffset.current.x) * damping;
       parallaxOffset.current.y += (targetY - parallaxOffset.current.y) * damping;
 

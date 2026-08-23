@@ -9,6 +9,19 @@ import react from '@vitejs/plugin-react';
  */
 export default defineConfig({
   plugins: [react()],
+
+  /**
+   * `__SCENE_EDITOR__` has to be defined here too — it is a bare identifier, so without
+   * a substitution any module referencing it throws `ReferenceError` under test rather
+   * than failing an assertion.
+   *
+   * False, which is the interesting value: it means the unit tests exercise the same
+   * code path production does, and `applySceneOverrides` correctly no-ops there.
+   */
+  define: {
+    __SCENE_EDITOR__: JSON.stringify(false),
+  },
+
   test: {
     environment: 'jsdom',
     globals: true,
