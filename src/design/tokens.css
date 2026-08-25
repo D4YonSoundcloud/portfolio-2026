@@ -107,7 +107,7 @@
 
   /* NodeCategory colours (§4.2, §7.1) — deliberately desaturated so the bloom pass
    * doesn't turn the scene into a rave. Read by scene/palette.ts. */
-  --cat-declaration: #c6a24a;
+  --cat-declaration: #d5c795;
   --cat-controlflow: #5e9a94;
   --cat-jsx: #9584c4;
   --cat-import: #6f8399;
@@ -122,9 +122,9 @@
   --cat-literal: #ff8a80; */
 
   /* Scene render inputs (§4.4, §7.2) — dark theme glows. */
-  --scene-emissive: 0.85;
-  --scene-edge-opacity: 0.2;
-  --scene-node-scale: 0.85;
+  --scene-emissive: 3.0;
+  --scene-edge-opacity: 0.3;
+  --scene-node-scale: 0.61;
   --scene-bg-fog: #0b0d10;
   
 
@@ -132,12 +132,12 @@
    * environment along a refracted vector, so the nodes still read as glass while
    * properly occluding each other. --scene-env-* are the two ends of that
    * environment gradient; they are not painted anywhere in the DOM. */
-  --scene-refraction: 0.9;
-  --scene-env-low: #2c1d1d;
-  --scene-env-high: #747474;
-  --scene-rim-strength: 0.5;
+  --scene-refraction: 1;
+  --scene-env-low: #2c353a;
+  --scene-env-high: #959ea3;
+  --scene-rim-strength: 3;
   /* How far non-active nodes fade while something is hovered or selected. */
-  --scene-dim: 0.42;
+  --scene-dim: 0.7;
 }
 
 /* ── Light ──────────────────────────────────────────────────────────────────────────
@@ -179,17 +179,17 @@
   --cat-literal: #8a4f4a;
 
   --scene-emissive: 0.85;
-  --scene-edge-opacity: 0.32;
+  --scene-edge-opacity: 0.31;
   --scene-node-scale: 0.72;
   --scene-bg-fog: #e8e6df;
 
   /* Light theme cannot glow, so the glass reads as polished acrylic on paper: a paler
    * environment, weaker refraction, a quieter ink rim. */
   --scene-refraction: 0.5;
-  --scene-env-low: #161513;
+  --scene-env-low: #413b2f;
   --scene-env-high: #ffffff;
   --scene-rim-strength: 0.8;
-  --scene-dim: 0.4;
+  --scene-dim: 0.78;
 }
 
 /* §8.1 — the scrim goes slightly stronger on mobile, where there's less margin between

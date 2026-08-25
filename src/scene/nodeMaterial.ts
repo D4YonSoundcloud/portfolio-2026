@@ -1,5 +1,6 @@
-import { Color, MeshPhysicalMaterial, NormalBlending, type IUniform } from 'three';
+import { Color, MeshPhysicalMaterial, NormalBlending, type IUniform, type Texture } from 'three';
 
+import { ENV_PATTERN_FUNCTION, ENV_PATTERN_UNIFORMS } from './envPattern.ts';
 import type { ScenePalette } from './palette.ts';
 import type { SharedValues, ThemedValues } from './sceneConfig.ts';
 
@@ -61,11 +62,17 @@ export interface NodeMaterialUniforms {
   uIor: IUniform<number>;
   /** Per-channel IOR offset — this is the colour fringing. */
   uDispersion: IUniform<number>;
+  /** Ends of the theme gradient, used only by the pre-bake fallback path. */
   uEnvLow: IUniform<Color>;
   uEnvHigh: IUniform<Color>;
-  uKeyColor: IUniform<Color>;
-  /** Brightness of the key lobe in the procedural environment. */
-  uEnvKeyGain: IUniform<number>;
+  /** Roughness the dispersion samples use. Low keeps the fringing sharp enough to read. */
+  uRefractBlur: IUniform<number>;
+  /** Roughness the reflection sample uses. */
+  uReflectBlur: IUniform<number>;
+  /** How far each node's environment sample is rotated by its own seed. */
+  uEnvJitter: IUniform<number>;
+  /** Scales the derivative-based mip bias that stops thin lines aliasing across facets. */
+  uEnvFilterGain: IUniform<number>;
   /** How far a hovered / selected instance expands along its normals. */
   uHoverSwell: IUniform<number>;
   uSelectSwell: IUniform<number>;
@@ -81,6 +88,7 @@ export function createNodeMaterial(
   palette: ScenePalette,
   themed: ThemedValues,
   shared: SharedValues,
+  envMap: Texture | null,
 ): NodeMaterial {
   const dark = palette.theme === 'dark';
 
@@ -95,8 +103,10 @@ export function createNodeMaterial(
     uDispersion: { value: themed.material.dispersion },
     uEnvLow: { value: palette.envLow.clone() },
     uEnvHigh: { value: palette.envHigh.clone() },
-    uKeyColor: { value: dark ? color.clone().lerp(new Color('#ffffff'), 0.7) : color.clone() },
-    uEnvKeyGain: { value: shared.material.envKeyGain },
+    uRefractBlur: { value: shared.material.envRefractBlur },
+    uReflectBlur: { value: shared.material.envReflectBlur },
+    uEnvJitter: { value: shared.material.envJitter },
+    uEnvFilterGain: { value: shared.material.envFilterGain },
     uHoverSwell: { value: shared.material.hoverSwell },
     uSelectSwell: { value: shared.material.selectSwell },
   };
@@ -115,6 +125,9 @@ export function createNodeMaterial(
     sheenRoughness: 0.75,
 
     // Fully opaque. Depth writes restored, so the cloud finally occludes itself.
+    envMap,
+    envMapIntensity: themed.material.envMapIntensity,
+
     transparent: false,
     opacity: 1,
     depthWrite: true,
@@ -131,14 +144,32 @@ export function createNodeMaterial(
         '#include <common>',
         `#include <common>
         attribute vec2 aState;
+        attribute float aSeed;
         varying vec2 vState;
+        varying vec4 vJitter;
         uniform float uHoverSwell;
-        uniform float uSelectSwell;`,
+        uniform float uSelectSwell;
+        uniform float uEnvJitter;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         vState = aState;
+
+        // Per-node environment rotation, precomputed here as sin/cos pairs.
+        //
+        // Every node samples the SAME environment, so without this they all reflect the
+        // same features in the same places and the field reads as a decal repeated a few
+        // thousand times. A fixed per-node rotation breaks that up while preserving the
+        // thing that makes an env map worth having: highlights still swim across facets
+        // as the camera drifts, because the rotation is constant and the view is not.
+        //
+        // Done in the vertex stage so the fragment stage costs one varying instead of
+        // four transcendentals per pixel.
+        float envYaw = aSeed * 6.2831853 * uEnvJitter;
+        float envPitch = ( fract( aSeed * 7.31 ) - 0.5 ) * 3.1415927 * uEnvJitter;
+        vJitter = vec4( cos( envYaw ), sin( envYaw ), cos( envPitch ), sin( envPitch ) );
+
         // Expand along the normal rather than rewriting instanceMatrix — the LOD pass
         // already owns those matrices, and fighting it would make the two effects
         // stomp on each other every frame.
@@ -146,6 +177,13 @@ export function createNodeMaterial(
       );
 
     shader.fragmentShader = shader.fragmentShader
+      /*
+       * Declarations go at <common>, near the top of the shader.
+       *
+       * `varying vec2 vState` MUST be here and must match the vertex stage exactly — it
+       * is the per-instance interaction state, and the whole hover/select path silently
+       * fails to compile without it.
+       */
       .replace(
         '#include <common>',
         `#include <common>
@@ -157,22 +195,87 @@ export function createNodeMaterial(
         uniform float uRefraction;
         uniform float uIor;
         uniform float uDispersion;
+        uniform float uRefractBlur;
+        uniform float uReflectBlur;
         uniform vec3 uEnvLow;
         uniform vec3 uEnvHigh;
-        uniform vec3 uKeyColor;
-        uniform float uEnvKeyGain;
+        uniform float uEnvJitter;
+        uniform float uEnvFilterGain;
         varying vec2 vState;
+        varying vec4 vJitter;`,
+      )
+      /*
+       * The environment sampler goes at <clipping_planes_pars_fragment> — the LAST
+       * pars-level include before main() — not at <common>.
+       *
+       * This ordering is not a style preference. In three's meshphysical fragment shader
+       * <common> is line 53, but `textureCubeUV` is defined by
+       * <cube_uv_reflection_fragment> on line 65 and the `envMap` sampler is declared by
+       * <envmap_common_pars_fragment> on line 66. A sampler defined at <common> therefore
+       * cannot see either, and fails to compile the moment an env map is attached — while
+       * compiling perfectly well in the fallback path, so the bug only appears once the
+       * first bake lands.
+       */
+      .replace(
+        '#include <clipping_planes_pars_fragment>',
+        `#include <clipping_planes_pars_fragment>
 
-        // Procedural stand-in for an environment map. A vertical gradient plus a soft
-        // key lobe: enough structure that a refracted direction returns something that
-        // varies, which is all the eye needs to read the surface as bending light.
-        vec3 sampleEnv( vec3 dir ) {
-          float h = dir.y * 0.5 + 0.5;
-          vec3 base = mix( uEnvLow, uEnvHigh, smoothstep( 0.0, 1.0, h ) );
-          vec3 keyDir = normalize( vec3( 0.5, 0.8, 0.35 ) );
-          float key = pow( max( dot( dir, keyDir ), 0.0 ), 8.0 );
-          return base + uKeyColor * key * uEnvKeyGain;
-        }`,
+        // ENVMAP_TYPE_CUBE_UV rather than USE_ENVMAP: 'textureCubeUV' only exists for
+        // CubeUV-mapped maps, which is what PMREM always produces. Guarding on the
+        // broader define would fail to compile if a plain cube or equirect map were
+        // ever assigned here.
+        /**
+         * Rotates a sample direction by this node's own seed. See the vertex stage.
+         */
+        vec3 envJitter( vec3 d ) {
+          vec3 r = vec3( d.x * vJitter.x - d.z * vJitter.y, d.y, d.x * vJitter.y + d.z * vJitter.x );
+          return vec3( r.x, r.y * vJitter.z - r.z * vJitter.w, r.y * vJitter.w + r.z * vJitter.z );
+        }
+
+        /**
+         * refract() with a guard for total internal reflection.
+         *
+         * It returns EXACTLY vec3(0.0) when the discriminant goes negative, which happens
+         * for eta > 1 at grazing angles - reachable, since the IOR control goes to 1.5.
+         * A zero direction is not a valid environment lookup and comes back as garbage or
+         * a fixed texel, which is what a facet 'skipping' looks like. Falling back to the
+         * reflected direction is also physically the right answer: total internal
+         * reflection is reflection.
+         */
+        vec3 refractSafe( vec3 incident, vec3 normal, float eta ) {
+          vec3 refracted = refract( incident, normal, eta );
+          return dot( refracted, refracted ) < 1e-6 ? reflect( incident, normal ) : refracted;
+        }
+
+        #ifdef ENVMAP_TYPE_CUBE_UV
+          /**
+           * Roughness selects a PMREM mip, so the blur is genuinely prefiltered.
+           *
+           * The base blur is widened by how fast the sample direction changes across a
+           * pixel. This is ordinary texture filtering, and it is what stops the thin
+           * pattern lines aliasing: on low-detail tiers the normal is constant across a
+           * whole facet, so adjacent facets sample the environment at very different
+           * directions and a thin line lands entirely on one and misses its neighbour -
+           * the line appears to SKIP a triangle. Widening the filter by the local
+           * derivative makes each facet average over the region it actually covers, so
+           * the line fades across the seam instead of jumping it.
+           */
+          vec3 sampleEnv( vec3 dir, float blur ) {
+            float footprint = length( fwidth( dir ) ) * uEnvFilterGain;
+            return textureCubeUV( envMap, dir, clamp( blur + footprint, 0.0, 1.0 ) ).rgb;
+          }
+        #else
+          // Fallback for the frame or two before the first bake lands.
+          //
+          // Deliberately the plain theme gradient and NOT the full pattern: reproducing
+          // the pattern here would mean carrying its ~18 uniforms on all ~24 batch
+          // materials forever, to be used for two frames. The gradient shares the
+          // pattern's colours and its overall light direction, so the baked map arriving
+          // reads as detail resolving in, not as a different environment.
+          vec3 sampleEnv( vec3 dir, float blur ) {
+            return mix( uEnvLow, uEnvHigh, smoothstep( -0.4, 0.7, dir.y ) );
+          }
+        #endif`,
       )
       .replace(
         '#include <opaque_fragment>',
@@ -191,16 +294,22 @@ export function createNodeMaterial(
 
         vec3 incident = -vnView;
         // Per-channel IOR is the whole trick behind the colour fringing at the edges.
-        vec3 refrR = viewToWorld * refract( incident, vnNormal, uIor - uDispersion );
-        vec3 refrG = viewToWorld * refract( incident, vnNormal, uIor );
-        vec3 refrB = viewToWorld * refract( incident, vnNormal, uIor + uDispersion );
+        // Sampled SHARP on purpose: dispersion is only visible where the environment
+        // has edges, and a blurred sample has none left to fringe.
+        //
+        // All four samples share one jitter rotation, so the three dispersion taps stay
+        // coherent with each other and with the reflection. Rotating them independently
+        // would scatter the fringe instead of separating it.
+        vec3 refrR = envJitter( viewToWorld * refractSafe( incident, vnNormal, uIor - uDispersion ) );
+        vec3 refrG = envJitter( viewToWorld * refractSafe( incident, vnNormal, uIor ) );
+        vec3 refrB = envJitter( viewToWorld * refractSafe( incident, vnNormal, uIor + uDispersion ) );
         vec3 refracted = vec3(
-          sampleEnv( refrR ).r,
-          sampleEnv( refrG ).g,
-          sampleEnv( refrB ).b
+          sampleEnv( refrR, uRefractBlur ).r,
+          sampleEnv( refrG, uRefractBlur ).g,
+          sampleEnv( refrB, uRefractBlur ).b
         );
 
-        vec3 reflected = sampleEnv( viewToWorld * reflect( incident, vnNormal ) );
+        vec3 reflected = sampleEnv( envJitter( viewToWorld * reflect( incident, vnNormal ) ), uReflectBlur );
 
         // Face-on reads as looking THROUGH the node; grazing reads as reflecting off it.
         vec3 glass = mix( refracted, reflected, fresnel );
@@ -230,7 +339,10 @@ export function createNodeMaterial(
       );
   };
 
-  material.customProgramCacheKey = () => `node-glass-${palette.theme}`;
+  // The envMap presence flips USE_ENVMAP, which produces a genuinely different program.
+  // Omitting it here would let three hand back the fallback program for a material that
+  // has an env map, or vice versa.
+  material.customProgramCacheKey = () => `node-glass-${palette.theme}-${envMap ? 'baked' : 'proc'}`;
 
   return { material, uniforms };
 }
@@ -255,11 +367,15 @@ export function syncNodeMaterial(
   material.roughness = themed.material.roughness;
   material.sheen = themed.material.sheen;
   material.emissiveIntensity = palette.emissiveIntensity * shared.material.emissiveScale;
+  material.envMapIntensity = themed.material.envMapIntensity;
 
   uniforms.uRimPower.value = themed.material.rimPower;
   uniforms.uDispersion.value = themed.material.dispersion;
   uniforms.uIor.value = shared.material.ior;
-  uniforms.uEnvKeyGain.value = shared.material.envKeyGain;
+  uniforms.uRefractBlur.value = shared.material.envRefractBlur;
+  uniforms.uReflectBlur.value = shared.material.envReflectBlur;
+  uniforms.uEnvJitter.value = shared.material.envJitter;
+  uniforms.uEnvFilterGain.value = shared.material.envFilterGain;
   uniforms.uHoverSwell.value = shared.material.hoverSwell;
   uniforms.uSelectSwell.value = shared.material.selectSwell;
 }

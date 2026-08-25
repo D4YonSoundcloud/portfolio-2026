@@ -9,6 +9,7 @@ import {
 } from '../scene/sceneConfig.ts';
 import { useSceneStore, type Quality } from '../store/sceneStore.ts';
 import { SHARED_FIELDS, THEMED_FIELDS, TOKEN_FIELDS, type FieldMeta, type TokenField } from './fields.ts';
+import { EnvPreview } from './EnvPreview.tsx';
 import { rehydrateEditor, useEditorStore } from './editorStore.ts';
 import { exportAll, hasChanges } from './exportOverrides.ts';
 import styles from './SceneEditor.module.css';
@@ -93,6 +94,10 @@ export function SceneEditor(): ReactNode {
       <SceneOverrideControls />
 
       <div className={styles.scroll}>
+        {/* First, because the Environment controls below are close to unusable without
+            it — you cannot tune a pattern you can only see reflected off rough glass. */}
+        
+
         <TokenSection theme={theme} />
 
         <FieldSection
@@ -107,6 +112,8 @@ export function SceneEditor(): ReactNode {
           }
           onReset={(path) => useEditorStore.getState().resetField(theme, path as ThemedPath, 'themed')}
         />
+
+        <EnvPreview />
 
         <FieldSection
           title="Shared"

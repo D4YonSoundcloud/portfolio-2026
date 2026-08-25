@@ -354,3 +354,48 @@
     max-height: 62dvh;
   }
 }
+
+/* ── Environment preview ────────────────────────────────────────────────────────────
+ * The canvases are readbacks of render targets, so their backing store is a fixed pixel
+ * size set in JS. `width: 100%` with `height: auto` lets them scale to the panel while
+ * `image-rendering: pixelated` keeps the thin pattern lines from being blurred away by
+ * the browser's smoothing — which would hide the exact detail you are here to judge.
+ */
+
+.previewBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.preview {
+  margin: 0;
+}
+
+.previewCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  /* A neutral mid ground: the dark theme's environment is near-black and the light
+   * theme's is near-white, and either would vanish against a matching panel. */
+  background: #555;
+}
+
+.previewCaption {
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--text-faint);
+}
+
+/* Provenance line under each preview — dimensions and mean luminance. Distinguishes
+ * "no readback arrived" from "an image arrived and is just very dark", which look
+ * identical on the canvas itself. */
+.previewStat {
+  float: right;
+  font-family: var(--font-code);
+  color: var(--text-dim);
+}

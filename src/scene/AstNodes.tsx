@@ -9,6 +9,7 @@ import { createNodeMaterial, syncNodeMaterial } from './nodeMaterial.ts';
 import { detailForQuality } from './geometryTiers.ts';
 import { isUiTarget } from './pointerGuard.ts';
 import { readSceneConfig, useSceneConfig } from './sceneConfig.ts';
+import { useEnvMap } from './envStore.ts';
 import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
 
 /**
@@ -29,6 +30,23 @@ const tempPosition = new Vector3();
 
 /** Below this delta a value is treated as settled and drops out of the animating set. */
 const SETTLE_EPSILON = 0.002;
+
+/**
+ * Stable per-node random in [0, 1), derived from the node id by FNV-1a.
+ *
+ * Derived rather than drawn from `Math.random()` so a node reflects the same slice of
+ * the environment on every load. A random seed would make the field shimmer differently
+ * each refresh, which turns any visual comparison - before/after a tweak, dev against
+ * the prerendered build - into guesswork.
+ */
+function seedFromId(id: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i += 1) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
 
 interface AstNodesProps {
   group: CategoryGroup;
@@ -52,6 +70,17 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
   const themed = config.themed[palette.theme];
 
   /**
+   * The baked environment map, or null until the first bake lands.
+   *
+   * This is the ONE exception to "every exposed value is live": presence of an env map
+   * flips ENVMAP_TYPE_CUBE_UV and produces a different program, so it must rebuild the
+   * material rather than being pushed by `syncNodeMaterial`. It changes at most twice in
+   * a session (once on load, once per theme switch), not per slider tick — the baker's
+   * trailing-edge scheduling exists precisely so a drag does not land here.
+   */
+  const envMap = useEnvMap();
+
+  /**
    * The material is rebuilt per theme, not mutated: `onBeforeCompile` bakes uniforms and
    * blend mode into a compiled program, and dark/light differ in both (§7.2).
    *
@@ -61,9 +90,9 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
    * per category-tier batch and make dragging unusable.
    */
   const nodeMaterial = useMemo(
-    () => createNodeMaterial(color, palette, themed, config.shared),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- config changes reach the material through syncNodeMaterial below, deliberately not by rebuilding it.
-    [color, palette],
+    () => createNodeMaterial(color, palette, themed, config.shared, envMap),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- config changes reach the material through syncNodeMaterial below, deliberately not by rebuilding it. envMap IS here: it changes the compiled program.
+    [color, palette, envMap],
   );
   const { material, uniforms } = nodeMaterial;
 
@@ -108,9 +137,22 @@ export function AstNodes({ group, palette }: AstNodesProps): ReactNode {
     };
   }, [group.nodes.length]);
 
+  /**
+   * Per-instance environment seed. Written once and never animated, unlike `aState`.
+   */
+  const seeds = useMemo(
+    () =>
+      new InstancedBufferAttribute(
+        Float32Array.from(group.nodes, (node) => seedFromId(node.id)),
+        1,
+      ),
+    [group.nodes],
+  );
+
   useEffect(() => {
     geometryRef.current?.setAttribute('aState', state.attribute);
-  }, [state]);
+    geometryRef.current?.setAttribute('aSeed', seeds);
+  }, [state, seeds]);
 
   useEffect(() => {
     const mesh = meshRef.current;

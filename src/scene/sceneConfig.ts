@@ -54,6 +54,12 @@ export interface ThemedValues {
     rimPower: number;
     roughness: number;
     sheen: number;
+    /**
+     * Scales three's own IBL contribution from the baked map. Separate from the manual
+     * refraction sampling, and worth keeping low: the two stack, and a high value here
+     * flattens the Fresnel gradient the material is built around.
+     */
+    envMapIntensity: number;
   };
   bloom: {
     intensity: number;
@@ -100,13 +106,67 @@ export interface SharedValues {
   material: {
     /** Index of refraction, as the eta passed to `refract()`. */
     ior: number;
-    /** Gain on the procedural environment's key lobe. */
-    envKeyGain: number;
+    /** Roughness used for the three dispersion samples. Low keeps fringing readable. */
+    envRefractBlur: number;
+    /** Roughness used for the reflection sample. */
+    envReflectBlur: number;
+    /**
+     * How far each node rotates the environment by its own seed, 0 to 1.
+     *
+     * Every node samples the same map, so at 0 they all reflect the same features in the
+     * same places and the field reads as one decal repeated thousands of times.
+     */
+    envJitter: number;
+    /**
+     * Gain on the derivative-based mip bias. Higher filters harder on small or
+     * steeply-angled facets, which is what stops thin pattern lines skipping across them.
+     */
+    envFilterGain: number;
     /** Multiplier on the palette's emissive, kept low so the Fresnel still reads. */
     emissiveScale: number;
     /** How far a hovered / selected instance expands along its normals. */
     hoverSwell: number;
     selectSwell: number;
+  };
+  /**
+   * The procedural environment's structure. Colour comes from the theme tokens
+   * (`--scene-env-low` / `--scene-env-high`); only geometry lives here, matching the
+   * token/config split described at the top of this file.
+   *
+   * See `envPattern.ts` for what each of these does to the image. The short version:
+   * refraction is only visible where the environment has HARD EDGES, so these controls
+   * are mostly about putting edges in and deciding how sharp they are.
+   */
+  envPattern: {
+    /** Equirect width in px; height is half. PMREM output size follows from it. */
+    bakeResolution: number;
+    /** Spins the whole pattern about Y, in degrees. Baked in, so it costs nothing. */
+    rotation: number;
+    /** Height of the ground/sky division, -1 to 1. */
+    horizonHeight: number;
+    /** 0 is the old smooth ramp; 1 is a hard edge, which is what actually refracts. */
+    horizonSharpness: number;
+    /** Posterises into N luminance steps. 0 disables. Every step edge is a new feature. */
+    panelSteps: number;
+    /** Latitude lines, evenly spaced in angle. */
+    bandCount: number;
+    bandWidth: number;
+    bandGain: number;
+    /** Longitude lines. These converge at the poles, which reads as a pole, not a bug. */
+    meridianCount: number;
+    meridianWidth: number;
+    meridianGain: number;
+    /**
+     * Fades meridians toward the poles, where they would otherwise converge into a
+     * crosshair stamped on every node. Higher fades earlier. See `envPattern.ts`.
+     */
+    meridianPolarFade: number;
+    /** Key lobe direction, in degrees. */
+    keyElevation: number;
+    keyAzimuth: number;
+    /** Tightness of the lobe. Higher is a smaller, harder highlight. */
+    keyPower: number;
+    keyGain: number;
   };
   lod: {
     /** §4.5 — deeper nodes fade in only when the camera is near that cluster. */
@@ -147,12 +207,18 @@ export interface SceneConfig {
 export const SCENE_DEFAULTS: SceneConfig = {
   themed: {
     dark: {
-      lights: { ambientIntensity: 0.7, keyIntensity: 1.1 },
-      material: { dispersion: 0.035, rimPower: 2.4, roughness: 0.22, sheen: 0.5 },
+      lights: { ambientIntensity: 1.66, keyIntensity: 1.1 },
+      material: {
+        dispersion: 0.035,
+        rimPower: 4,
+        roughness: 0,
+        sheen: 1.0,
+        envMapIntensity: 0.6,
+      },
       // Threshold raised from 0.32: the glass material's Fresnel rims are bright at
       // grazing angles on every one of ~2600 nodes, and lower down the whole cloud
       // blooms into a haze instead of the rims reading as edges.
-      bloom: { intensity: 0.32, threshold: 0.1, smoothing: 0.9 },
+      bloom: { intensity: 0.32, threshold: 0.75, smoothing: 0.9 },
       // Unused on dark (the composer runs bloom instead) but kept populated so the
       // two theme blocks stay structurally identical and the panel never shows a gap.
       vignette: { offset: 0.35, darkness: 0.28 },
@@ -160,15 +226,23 @@ export const SCENE_DEFAULTS: SceneConfig = {
     },
     light: {
       lights: { ambientIntensity: 1.15, keyIntensity: 0.5 },
-      material: { dispersion: 0.022, rimPower: 3.1, roughness: 0.5, sheen: 0.2 },
+      material: {
+        dispersion: 0.023,
+        rimPower: 7,
+        roughness: 0.5,
+        sheen: 0.2,
+        // Lower on light: the paper ground has no business picking up strong IBL, and
+        // this theme is not tone mapped, so bright env values clip rather than roll off.
+        envMapIntensity: 0.35,
+      },
       bloom: { intensity: 0.32, threshold: 0.1, smoothing: 0.9 },
-      vignette: { offset: 0.35, darkness: 0.28 },
+      vignette: { offset: 0, darkness: 1.0 },
       selection: { ringOpacity: 0.7, shellOpacity: 0.42 },
     },
   },
   shared: {
     lights: { keyX: 30, keyY: 40, keyZ: 50 },
-    fog: { near: 20, far: 190 },
+    fog: { near: 16, far: 190 },
     camera: {
       viewDistance: 52,
       driftRadius: 3.2,
@@ -179,11 +253,36 @@ export const SCENE_DEFAULTS: SceneConfig = {
       inspectAttack: 0.5,
     },
     material: {
-      ior: 0.72,
-      envKeyGain: 0.7,
+      ior: 0.955,
+      envRefractBlur: 0.04,
+      envReflectBlur: 0.18,
+      envJitter: 0.0,
+      envFilterGain: 12,
       emissiveScale: 0.25,
       hoverSwell: 0.16,
       selectSwell: 0.3,
+    },
+    envPattern: {
+      bakeResolution: 256,
+      rotation: 0,
+      horizonHeight: -0.05,
+      // Not fully hard by default: a razor edge aliases badly at 512 before PMREM
+      // smooths it, and this is already sharp enough to refract visibly.
+      horizonSharpness: 0.61,
+      panelSteps: 9,
+      bandCount: 11,
+      // Thin rather than bright, deliberately. Bloom's threshold is 0.1 and there are
+      // ~2600 nodes; wide bright features are how the cloud turns back into haze.
+      bandWidth: 0.08,
+      bandGain: 4.15,
+      meridianCount: 20,
+      meridianWidth: 0.115,
+      meridianGain: 1.3,
+      meridianPolarFade: 8,
+      keyElevation: 32,
+      keyAzimuth: -19,
+      keyPower: 1,
+      keyGain: 0,
     },
     lod: { near: 46, far: 92, shallowDepth: 2, intervalMs: 120 },
     interaction: { hoverAttack: 0.14, selectAttack: 0.22, dimAttack: 0.18 },

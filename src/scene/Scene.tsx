@@ -9,6 +9,8 @@ import { CameraRig } from './CameraRig.tsx';
 import { NodeTooltip } from './NodeTooltip.tsx';
 import { SelectionOverlay } from './SelectionOverlay.tsx';
 import { TreeTraversal } from './TreeTraversal.tsx';
+import { EnvironmentBaker } from './EnvironmentBaker.tsx';
+import { useEnvPreviewEnabled, useEnvPreviewExposure } from './envStore.ts';
 import { readPalette } from './palette.ts';
 import { useSceneConfig } from './sceneConfig.ts';
 import { useAstGraph } from './useAstGraph.ts';
@@ -36,6 +38,15 @@ export function Scene(): ReactNode {
   const config = useSceneConfig();
   const themed = config.themed[resolvedTheme];
   const shared = config.shared;
+
+  /**
+   * Whether the dev editor wants preview readbacks. `readRenderTargetPixels` is a
+   * synchronous GPU stall, so it is gated on the panel actually being open. An ordinary
+   * unconditional hook — it just always reports false in production, because nothing
+   * there ever calls `setEnvPreviewEnabled`.
+   */
+  const editorPreview = useEnvPreviewEnabled();
+  const editorExposure = useEnvPreviewExposure();
 
   /**
    * Re-read on theme change only — `getComputedStyle` forces a style recalc and must
@@ -73,6 +84,17 @@ export function Scene(): ReactNode {
       <fog attach="fog" args={[palette.fog.getHex(), shared.fog.near, shared.fog.far]} />
 
       <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
+
+      {/*
+        Bakes the procedural environment into a PMREM map (§4.4). Renders nothing, and
+        must sit inside the Canvas because it needs the renderer. Mounted before the
+        nodes so its first bake is queued ahead of their first material build.
+      */}
+      <EnvironmentBaker
+        palette={palette}
+        previewEnabled={editorPreview}
+        previewExposure={editorExposure}
+      />
 
       <AstEdges positions={prepared.edgePositions} palette={palette} />
 
