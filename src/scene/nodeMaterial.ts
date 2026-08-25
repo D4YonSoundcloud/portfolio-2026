@@ -1,6 +1,5 @@
 import { Color, MeshPhysicalMaterial, NormalBlending, type IUniform, type Texture } from 'three';
 
-import { ENV_PATTERN_FUNCTION, ENV_PATTERN_UNIFORMS } from './envPattern.ts';
 import type { ScenePalette } from './palette.ts';
 import type { SharedValues, ThemedValues } from './sceneConfig.ts';
 

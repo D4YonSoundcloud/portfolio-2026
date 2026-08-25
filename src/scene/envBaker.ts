@@ -27,7 +27,7 @@ import {
   ENV_PATTERN_UNIFORMS,
 } from './envPattern.ts';
 import type { ScenePalette } from './palette.ts';
-import type { SharedValues, ThemedValues } from './sceneConfig.ts';
+import type { SharedValues } from './sceneConfig.ts';
 import type { EnvPreviewImage } from './envStore.ts';
 
 /**

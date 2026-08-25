@@ -85,7 +85,7 @@ export const projects: readonly Project[] = [
     decision:
       'Dedicated software, web front-end, hosted back-end, both on Azure GOV-HIGH, plus a Vector Database populated with all approved answers from the company' + 's past contracts — grounding every suggestion in real precedent.',
     outcome: '2 week workshops, condensed to 1-2 days.',
-    stack: ['React', 'Python', 'SQlite'],
+    stack: ['JavaScript', 'Python', 'SQlite'],
   },
   {
     name: 'Coaster Clash 2k99',
