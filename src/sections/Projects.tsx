@@ -43,13 +43,13 @@ export function Projects(): ReactNode {
               </div>
             </dl>
 
-            <ul className={styles.stack}>
+            {/* <ul className={styles.stack}>
               {project.stack.map((item) => (
                 <li key={item} className={styles.stackItem}>
                   {item}
                 </li>
               ))}
-            </ul>
+            </ul> */}
           </li>
         ))}
       </ol>
