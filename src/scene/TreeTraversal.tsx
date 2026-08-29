@@ -2,8 +2,14 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useThree } from '@react-three/fiber';
 import { Vector3 } from 'three';
 
-import type { AstNode } from '../ast-pipeline/schema.ts';
-import { useSceneStore } from '../store/sceneStore.ts';
+import type { AstGraph, AstNode } from '../ast-pipeline/schema.ts';
+import { readSceneStore, useSceneStore } from '../store/sceneStore.ts';
+import {
+  createModuleSession,
+  stepModule,
+  type ModuleContext,
+  type ModuleSession,
+} from './moduleTraversal.ts';
 import {
   createSession,
   isWithinSession,
@@ -31,16 +37,20 @@ const WHEEL_COOLDOWN_MS = 260;
 
 interface TreeTraversalProps {
   nodesById: Map<string, AstNode>;
+  graph: AstGraph;
 }
 
-export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
+export function TreeTraversal({ nodesById, graph }: TreeTraversalProps): ReactNode {
   const camera = useThree((state) => state.camera);
   const gl = useThree((state) => state.gl);
 
   const inspectorNodeId = useSceneStore((s) => s.inspectorNodeId);
   const openInspector = useSceneStore((s) => s.openInspector);
+  const navRequest = useSceneStore((s) => s.navRequest);
+  const clearNavRequest = useSceneStore((s) => s.clearNavRequest);
 
   const session = useRef<TraversalSession | null>(null);
+  const moduleSession = useRef<ModuleSession | null>(null);
   const wheelAccum = useRef(0);
   const lockedUntil = useRef(0);
   /** Set while we are the ones moving the cursor, so our own update is not treated as a click. */
@@ -83,6 +93,53 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
     };
   };
 
+  /** File path -> that file's visible root node, for the module walk. */
+  const rootsByFile = (): Map<string, AstNode> => {
+    const map = new Map<string, AstNode>();
+    for (const node of nodesById.values()) {
+      if (node.depth === 0) map.set(node.fileName, node);
+    }
+    return map;
+  };
+
+  const moduleContext = (): ModuleContext => ({
+    moduleEdges: graph.moduleEdges,
+    rootsByFile: rootsByFile(),
+    cameraPosition: camera.position,
+  });
+
+  /**
+   * Performs one step on either axis and retargets the inspector.
+   *
+   * Shared by the wheel handler and the on-screen buttons so both paths land on exactly
+   * the same logic — the same reasoning §5.1 applies to the section carousel, where
+   * every input converges on one `setFocusedIndex`.
+   */
+  const step = (axis: 'tree' | 'module', direction: 1 | -1): void => {
+    if (axis === 'tree') {
+      const current = session.current;
+      if (!current) return;
+      const nextId = direction > 0 ? stepDown(current, context()) : stepUp(current, context());
+      if (!nextId) return;
+      selfDriven.current = true;
+      openInspector(nextId);
+      return;
+    }
+
+    const current = moduleSession.current;
+    if (!current) return;
+    const nextFile = stepModule(current, moduleContext(), direction);
+    if (!nextFile) return;
+
+    // Select the target file's ROOT node. The camera flies there through the existing
+    // inspect framing, and the import arcs light up for that file for free — the focus
+    // response in ModuleEdges keys off the inspected node's file.
+    const root = rootsByFile().get(nextFile);
+    if (!root) return;
+    selfDriven.current = true;
+    openInspector(root.id);
+  };
+
   /**
    * Session lifecycle.
    *
@@ -93,6 +150,7 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
   useEffect(() => {
     if (!inspectorNodeId) {
       session.current = null;
+      moduleSession.current = null;
       return;
     }
 
@@ -109,6 +167,13 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
     }
 
     session.current = createSession(inspectorNodeId, context());
+
+    // The module walk is anchored to the FILE, not the node, so it survives tree
+    // traversal within one file and only resets when the file itself changes.
+    const file = nodesById.get(inspectorNodeId)?.fileName;
+    if (file && moduleSession.current?.visited[moduleSession.current.cursor] !== file) {
+      moduleSession.current = createModuleSession(file);
+    }
     // `context` is intentionally omitted: it reads live camera state at call time rather
     // than closing over a snapshot, so it must not drive re-subscription.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -118,6 +183,11 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
     if (!inspectorNodeId) return;
 
     const onWheel = (event: WheelEvent): void => {
+      // Explore mode hands the wheel to OrbitControls for dollying (§5.1). Traversal
+      // stays reachable there through the on-screen buttons and shift+wheel is not
+      // special-cased, so zooming is never ambiguous.
+      if (readSceneStore().interactionMode === 'explore') return;
+
       // The code snippet owns its own scrolling. Only wheel events OUTSIDE the panel
       // traverse the tree — otherwise reading a long snippet would walk the tree at the
       // same time.
@@ -140,28 +210,35 @@ export function TreeTraversal({ nodesById }: TreeTraversalProps): ReactNode {
 
       if (Math.abs(wheelAccum.current) < WHEEL_THRESHOLD) return;
 
-      const direction = Math.sign(wheelAccum.current);
+      const direction = Math.sign(wheelAccum.current) > 0 ? 1 : -1;
       wheelAccum.current = 0;
       // Longer than the carousel's cooldown: each step retargets the camera, and
       // stacking those would blur past several nodes on one flick.
       lockedUntil.current = now + WHEEL_COOLDOWN_MS;
 
-      const current = session.current;
-      if (!current) return;
-
-      const nextId =
-        direction > 0 ? stepDown(current, context()) : stepUp(current, context());
-      // null means the top of the visible tree or every branch exhausted; hold still.
-      if (!nextId) return;
-
-      selfDriven.current = true;
-      openInspector(nextId);
+      // Shift picks the axis: plain wheel walks the syntax tree within a file, shift
+      // walks the import graph between files.
+      step(event.shiftKey ? 'module' : 'tree', direction);
     };
 
     window.addEventListener('wheel', onWheel, { passive: false });
     return () => window.removeEventListener('wheel', onWheel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inspectorNodeId, openInspector, nodesById]);
+  }, [inspectorNodeId, openInspector, nodesById, graph]);
+
+  /**
+   * Steps requested from outside the Canvas — the on-screen arrow buttons (§8.2).
+   *
+   * They cannot call `step` directly: branch ordering needs the live camera pose, which
+   * only exists in here. They publish intent to the store instead and this consumes it,
+   * clearing the request so the same button can be pressed again.
+   */
+  useEffect(() => {
+    if (!navRequest) return;
+    if (inspectorNodeId) step(navRequest.axis, navRequest.direction);
+    clearNavRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navRequest, inspectorNodeId, clearNavRequest]);
 
   return null;
 }

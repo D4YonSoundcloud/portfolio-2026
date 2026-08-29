@@ -1,0 +1,124 @@
+/**
+ * Traversal arrows and the explore toggle.
+ *
+ * Built on the same tokens as the rest of the chrome so they read as part of the
+ * interface rather than as an overlay bolted on top.
+ */
+
+.cluster {
+  position: fixed;
+  top: var(--space-4);
+  z-index: var(--z-chrome);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.left {
+  left: var(--space-4);
+}
+
+.right {
+  right: var(--space-4);
+}
+
+.label {
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.button {
+  display: grid;
+  place-items: center;
+
+  /*
+   * 44px, not the ~28px the rest of the chrome uses.
+   *
+   * These are the only controls on the page whose entire reason for existing is touch
+   * input, and 44px is the minimum comfortable target (§8.2). Matching the desktop
+   * chrome's size here would mean shipping a touch affordance that is awkward to touch.
+   */
+  width: 44px;
+  height: 44px;
+
+  color: var(--text-dim);
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.button:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+/* Held while pressed so a tap registers visibly on touch, where there is no hover to
+ * confirm the press landed. */
+.button:active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.explore {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-chrome);
+
+  padding: var(--space-2) var(--space-4);
+  min-height: 44px;
+
+  font-family: var(--font-label);
+  font-size: var(--step--1);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-dim);
+
+  border: var(--rule-width) solid var(--rule);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.explore:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+.explore[aria-pressed='true'] {
+  color: var(--bg);
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/*
+ * On a narrow viewport the inspector is a bottom sheet covering ~78% of the height
+ * (§8.1), so the top corners are the only reliably clear space — which is exactly where
+ * these sit. The explore toggle moves up out of the sheet's way.
+ */
+@media (max-width: 767px) {
+  .explore {
+    bottom: auto;
+    top: var(--space-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .explore {
+    transition: none;
+  }
+}

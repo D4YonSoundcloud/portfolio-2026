@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Vector3 } from 'three';
-import { PerformanceMonitor } from '@react-three/drei';
+import { OrbitControls, PerformanceMonitor } from '@react-three/drei';
 import { Bloom, EffectComposer, Vignette } from '@react-three/postprocessing';
 
 import { AstEdges } from './AstEdges.tsx';
@@ -10,6 +10,7 @@ import { NodeTooltip } from './NodeTooltip.tsx';
 import { SelectionOverlay } from './SelectionOverlay.tsx';
 import { TreeTraversal } from './TreeTraversal.tsx';
 import { EnvironmentBaker } from './EnvironmentBaker.tsx';
+import { ModuleEdges } from './ModuleEdges.tsx';
 import { useEnvPreviewEnabled, useEnvPreviewExposure } from './envStore.ts';
 import { readPalette } from './palette.ts';
 import { useSceneConfig } from './sceneConfig.ts';
@@ -34,6 +35,8 @@ export function Scene(): ReactNode {
   const setQuality = useSceneStore((s) => s.setQuality);
   const qualityPinned = useSceneStore((s) => s.qualityPinned);
   const inspectorNodeId = useSceneStore((s) => s.inspectorNodeId);
+  const interactionMode = useSceneStore((s) => s.interactionMode);
+  const exploring = interactionMode === 'explore';
 
   const config = useSceneConfig();
   const themed = config.themed[resolvedTheme];
@@ -81,9 +84,44 @@ export function Scene(): ReactNode {
         position={[shared.lights.keyX, shared.lights.keyY, shared.lights.keyZ]}
         intensity={themed.lights.keyIntensity}
       />
-      <fog attach="fog" args={[palette.fog.getHex(), shared.fog.near, shared.fog.far]} />
+      {/*
+        Fog is dropped in explore mode.
+        
+        It exists to give the cluster depth from the fixed viewing distances the carousel
+        uses (§4.4). Once the visitor can fly, it stops reading as depth and starts acting
+        as a wall — anything they navigate toward stays grey until they are on top of it.
+        `attach` is conditional rather than the far plane being pushed out, so the scene
+        genuinely has no fog rather than fog tuned to be almost invisible.
+      */}
+      {exploring ? null : (
+        <fog attach="fog" args={[palette.fog.getHex(), shared.fog.near, shared.fog.far]} />
+      )}
 
-      <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
+      {/*
+        Exactly one of these owns the camera at a time. CameraRig writes position and
+        lookAt every frame, so running both would mean the two fighting over the same
+        properties on alternating frames.
+      */}
+      {exploring ? (
+        <OrbitControls
+          makeDefault
+          // Damped so a flick coasts to a stop rather than halting dead, which matches
+          // how the sprung carousel transitions feel.
+          enableDamping
+          dampingFactor={0.08}
+          // The wheel dollies here (§5.1). TreeTraversal stands down in this mode so the
+          // two can never both claim a scroll.
+          enableZoom
+          zoomSpeed={0.8}
+          rotateSpeed={0.6}
+          panSpeed={0.7}
+          // Far enough out to see the whole graph, close enough to inspect one node.
+          minDistance={4}
+          maxDistance={400}
+        />
+      ) : (
+        <CameraRig clusterTargets={prepared.clusterTargets} inspectTarget={inspectTarget} />
+      )}
 
       {/*
         Bakes the procedural environment into a PMREM map (§4.4). Renders nothing, and
@@ -98,6 +136,14 @@ export function Scene(): ReactNode {
 
       <AstEdges positions={prepared.edgePositions} palette={palette} />
 
+      {/*
+        Imports between source files. A separate layer from AstEdges because it draws a
+        different kind of fact — long-range dependencies between clusters, rather than
+        containment within one — and reads from the full graph rather than the
+        depth-filtered view, since file roots are never filtered out.
+      */}
+      <ModuleEdges graph={prepared.graph} palette={palette} />
+
       {prepared.groups.map((group) => (
         // Keyed by category:tier — one mesh per batch (see useAstGraph).
         <AstNodes key={group.key} group={group} palette={palette} />
@@ -109,7 +155,7 @@ export function Scene(): ReactNode {
       <SelectionOverlay graph={prepared.graph} palette={palette} />
 
       {/* Wheel walks the tree while the inspector is open. Renders nothing. */}
-      <TreeTraversal nodesById={prepared.nodesById} />
+      <TreeTraversal nodesById={prepared.nodesById} graph={prepared.graph} />
 
       {/*
         §8.3 — PerformanceMonitor fine-tunes upward from the boot-seeded quality tier

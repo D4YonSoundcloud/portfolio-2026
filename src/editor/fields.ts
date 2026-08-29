@@ -134,6 +134,31 @@ export const THEMED_FIELDS: Record<ThemedPath, FieldMeta> = {
     hint: 'How far the corners recede. Replaces bloom, which reads as a bug on paper.',
   },
 
+  'moduleEdges.opacity': {
+    label: 'Arc opacity',
+    group: 'Import arcs',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: 'Resting opacity of a file-to-file import arc.',
+  },
+  'moduleEdges.focusOpacity': {
+    label: 'Arc focus',
+    group: 'Import arcs',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "Opacity once the arc touches the hovered or inspected node's file.",
+  },
+  'moduleEdges.pulseGain': {
+    label: 'Pulse gain',
+    group: 'Import arcs',
+    min: 0,
+    max: 6,
+    step: 0.05,
+    hint: 'Brightness of the travelling pulse. 0 leaves a static arc.',
+  },
+
   'selection.ringOpacity': {
     label: 'Ring opacity',
     group: 'Selection',
@@ -489,6 +514,47 @@ export const SHARED_FIELDS: Record<SharedPath, FieldMeta> = {
     max: 1.5,
     step: 0.01,
     hint: 'Seconds for the surrounding field to fade once anything becomes active.',
+  },
+
+  'moduleEdges.arcHeight': {
+    label: 'Arc height',
+    group: 'Import arcs',
+    min: 0,
+    max: 1.5,
+    step: 0.01,
+    hint: 'Bulge as a fraction of the distance between file roots. 0 gives straight lines.',
+  },
+  'moduleEdges.segments': {
+    label: 'Arc segments',
+    group: 'Import arcs',
+    min: 2,
+    max: 64,
+    step: 1,
+    hint: 'Tessellation. The only arc control that rebuilds geometry rather than a uniform.',
+  },
+  'moduleEdges.endFade': {
+    label: 'End fade',
+    group: 'Import arcs',
+    min: 0,
+    max: 0.5,
+    step: 0.005,
+    hint: 'How much of each end dissolves into the file root instead of ending in a stub.',
+  },
+  'moduleEdges.pulseSpeed': {
+    label: 'Pulse speed',
+    group: 'Import arcs',
+    min: 0,
+    max: 2,
+    step: 0.01,
+    hint: 'Arc lengths per second. Frozen under reduced motion regardless.',
+  },
+  'moduleEdges.pulseLength': {
+    label: 'Pulse length',
+    group: 'Import arcs',
+    min: 0.01,
+    max: 0.9,
+    step: 0.01,
+    hint: 'Length of the pulse as a fraction of the arc.',
   },
 
   'selection.ringInner': {

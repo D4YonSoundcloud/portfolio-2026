@@ -71,6 +71,18 @@ export interface FocusNavOptions {
 }
 
 export function useFocusNav({ containerRef, enabled = true }: FocusNavOptions): void {
+  /**
+   * The carousel only owns input in 'sections' mode.
+   *
+   * Previously this hook was switched off by an `enabled` prop that the caller derived
+   * from "is the inspector open". That worked while there were two consumers; with four
+   * it becomes a condition every handler has to reimplement consistently. The mode is
+   * now the single arbiter, and `enabled` remains for callers that want to suppress the
+   * carousel for their own reasons.
+   */
+  const interactionMode = useSceneStore((s) => s.interactionMode);
+  const active = enabled && interactionMode === 'sections';
+
   const setFocusedIndex = useSceneStore((s) => s.setFocusedIndex);
   const advanceFocus = useSceneStore((s) => s.advanceFocus);
   // Subscribed, not read via getState(), so changing the mode (§5.2) rebinds the
@@ -86,7 +98,7 @@ export function useFocusNav({ containerRef, enabled = true }: FocusNavOptions): 
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !enabled) return;
+    if (!container || !active) return;
 
     const horizontal = transitionMode === 'horizontal';
 
@@ -234,7 +246,7 @@ export function useFocusNav({ containerRef, enabled = true }: FocusNavOptions): 
       container.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [containerRef, enabled, transitionMode, advanceFocus, setFocusedIndex]);
+  }, [containerRef, active, transitionMode, advanceFocus, setFocusedIndex]);
 }
 
 export const focusNavConstants = {

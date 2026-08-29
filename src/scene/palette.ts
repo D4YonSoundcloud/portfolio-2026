@@ -34,6 +34,8 @@ export interface ScenePalette {
   /** Low and high ends of the procedural environment the refraction samples. */
   envLow: Color;
   envHigh: Color;
+   /** Colour of the file-to-file import arcs (scene/ModuleEdges.tsx). */
+  moduleEdge: Color;
   /** Fresnel rim intensity. */
   rimStrength: number;
   /** Multiplier applied to non-active nodes while something is hovered or selected. */
@@ -80,6 +82,9 @@ export function readPalette(theme: ResolvedTheme): ScenePalette {
     refraction: readNumber(styles, '--scene-refraction', theme === 'dark' ? 0.72 : 0.5),
     envLow: new Color(readVar(styles, '--scene-env-low', theme === 'dark' ? '#0d1117' : '#c9c6bd')),
     envHigh: new Color(readVar(styles, '--scene-env-high', theme === 'dark' ? '#5a6478' : '#ffffff')),
+    moduleEdge: new Color(
+      readVar(styles, '--scene-module-edge', theme === 'dark' ? '#5eead4' : '#0f766e'),
+    ),
     rimStrength: readNumber(styles, '--scene-rim-strength', theme === 'dark' ? 0.85 : 0.4),
     dim: readNumber(styles, '--scene-dim', theme === 'dark' ? 0.42 : 0.3),
     fog: new Color(readVar(styles, '--scene-bg-fog', theme === 'dark' ? '#0b0d10' : '#e8e6df')),
@@ -101,6 +106,7 @@ function fallbackPalette(theme: ResolvedTheme): ScenePalette {
     refraction: theme === 'dark' ? 1.0 : 0.5,
     envLow: new Color(theme === 'dark' ? '#2c353a' : '#413b2f'),
     envHigh: new Color(theme === 'dark' ? '#959ea3' : '#ffffff'),
+    moduleEdge: new Color(theme === 'dark' ? '#5eead4' : '#0f766e'),
     rimStrength: theme === 'dark' ? 3.0 : 0.4,
     dim: theme === 'dark' ? 0.7 : 0.3,
     fog: new Color(theme === 'dark' ? '#0b0d10' : '#e8e6df'),

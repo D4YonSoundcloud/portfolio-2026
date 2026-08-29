@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 import { categorize, kindName, readLabel } from './categorize.ts';
+import { buildModuleEdges, type ImportRecord } from './moduleEdges.ts';
 import { computeLayout, type LayoutInput } from './layout.ts';
 import {
   astGraphSchema,
@@ -56,7 +57,7 @@ const MAX_DEPTH = 6;
  * §4.6 — depth ceiling for snippet generation. Nodes below this alias upward to an
  * ancestor's snippet rather than storing a near-duplicate of it.
  */
-const SNIPPET_MAX_DEPTH = 2;
+const SNIPPET_MAX_DEPTH = 4;
 
 /** Kinds that add noise without adding readable structure. */
 const SKIPPED_KINDS = new Set<ts.SyntaxKind>([
@@ -107,9 +108,11 @@ function extract(files: readonly string[]): {
   nodes: WorkingNode[];
   fileTexts: Map<string, string>;
   totalParsed: number;
+  imports: ImportRecord[];
 } {
   const nodes: WorkingNode[] = [];
   const fileTexts = new Map<string, string>();
+  const imports: ImportRecord[] = [];
   let totalParsed = 0;
 
   for (const absolutePath of files) {
@@ -158,6 +161,18 @@ function extract(files: readonly string[]): {
         return;
       }
 
+      /*
+       * Record the import while the real ts.Node is still in hand.
+       *
+       * The specifier also survives onto the emitted node as its label, but reading it
+       * back from there would mean trusting that `readLabel` never changes what it puts
+       * on an ImportDeclaration — a coupling that would break silently and leave the
+       * import layer quietly empty. Captured from the AST directly instead.
+       */
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        imports.push({ fileName: relativePath, specifier: node.moduleSpecifier.text });
+      }
+
       const start = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line;
       const end = sourceFile.getLineAndCharacterOfPosition(node.end).line;
 
@@ -184,7 +199,7 @@ function extract(files: readonly string[]): {
     ts.forEachChild(sourceFile, (child) => visit(child, rootIndex, 1));
   }
 
-  return { nodes, fileTexts, totalParsed };
+  return { nodes, fileTexts, totalParsed, imports };
 }
 
 /** `readLabel` calls `.getText()`, which throws on synthesised nodes. Never fail the build for a label. */
@@ -257,7 +272,7 @@ async function main(): Promise<void> {
     throw new Error(`No source files found under ${SOURCE_ROOT}/ — check ${SOURCE_GLOB}`);
   }
 
-  const { nodes: rawNodes, fileTexts, totalParsed } = extract(files);
+  const { nodes: rawNodes, fileTexts, totalParsed, imports } = extract(files);
   const nodes = prune(rawNodes);
 
   // §4.3 — layout runs once, here.
@@ -288,12 +303,18 @@ async function main(): Promise<void> {
     if (n.parentIndex !== null) edges.push([n.parentIndex, i]);
   });
 
+  // §4.2 — file-to-file imports, resolved against the files actually parsed. Kept
+  // separate from `edges` because they connect FILE ROOTS rather than parent/child
+  // nodes, and are drawn as their own layer (see scene/ModuleEdges.tsx).
+  const moduleEdges = buildModuleEdges(imports, [...fileTexts.keys()]);
+
   const graph: AstGraph = {
-    version: 1,
+    version: 2,
     generatedAt: new Date().toISOString(),
     files: [...fileTexts.keys()],
     nodes: astNodes,
     edges,
+    moduleEdges,
     stats: {
       totalParsed,
       rendered: astNodes.length,

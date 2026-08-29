@@ -127,7 +127,19 @@ export function CameraRig({ clusterTargets, inspectTarget }: CameraRigProps): Re
   useFrame((state, delta) => {
     // Read via getState, never a subscription — re-rendering this component every frame
     // would defeat the render loop entirely.
-    const { reducedMotion: reduced, isCoarsePointer } = readSceneStore();
+    const { reducedMotion: reduced, isCoarsePointer, interactionMode } = readSceneStore();
+
+    /*
+     * Explore mode: stand down completely.
+     *
+     * This rig writes camera.position and calls camera.lookAt EVERY FRAME, so free
+     * navigation is not a matter of adding controls alongside it — the two would fight
+     * for the same properties and the camera would snap back the instant the visitor let
+     * go. Returning early hands ownership over cleanly, and picking it back up is just
+     * as clean: the spring still holds the focused section's pose, so leaving explore
+     * mode eases back to where the carousel left off rather than cutting.
+     */
+    if (interactionMode === 'explore') return;
     const { camera: cameraConfig } = readSceneConfig().shared;
     const ambient = !reduced && !isCoarsePointer;
 

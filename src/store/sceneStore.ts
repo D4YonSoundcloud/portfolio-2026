@@ -17,6 +17,30 @@ export type ThemeMode = 'dark' | 'light' | 'system';
 export type ResolvedTheme = 'dark' | 'light';
 export type Quality = 'high' | 'medium' | 'low';
 
+/** See `SceneStore.interactionMode`. */
+export type InteractionMode = 'sections' | 'tree' | 'explore';
+
+/**
+ * Which graph a traversal step walks.
+ *
+ * 'tree'   parent/child within one source file — the existing wheel behaviour
+ * 'module' import edges between files — shift+wheel, and the right-hand mobile buttons
+ */
+export type NavAxis = 'tree' | 'module';
+
+export interface NavRequest {
+  axis: NavAxis;
+  /** 1 steps deeper or follows an import; -1 steps back or towards a dependent. */
+  direction: 1 | -1;
+  nonce: number;
+}
+
+let navNonce = 0;
+function nextNavNonce(): number {
+  navNonce += 1;
+  return navNonce;
+}
+
 const TRANSITION_KEY = 'portfolio:transitionMode';
 const THEME_KEY = 'portfolio:themeMode';
 const DEPTH_KEY = 'portfolio:maxDepth';
@@ -38,6 +62,31 @@ export interface SceneStore {
   hoveredNodeId: string | null;
   inspectorNodeId: string | null;
   reducedMotion: boolean;
+  /**
+   * Which input mode owns the wheel, arrows and pointer.
+   *
+   * Before this, coordination was implicit: `useFocusNav` disabled itself when the
+   * inspector was open, and that single `if` was enough because there were exactly two
+   * consumers. There are now four — the section carousel, tree traversal, module
+   * traversal, and free-camera dolly — and implicit coordination does not survive four.
+   * Every handler now declares which modes it answers to, so the arbitration is one
+   * enumerated decision rather than a web of conditions that only happens to agree.
+   *
+   *   'sections'  the carousel owns input; the default
+   *   'tree'      a node is open in the inspector and the wheel walks the AST
+   *   'explore'   the visitor drives the camera; CameraRig stands down
+   */
+  interactionMode: InteractionMode;
+  /**
+   * The most recent traversal step requested from outside the Canvas.
+   *
+   * Traversal has to run inside the Canvas because branch ordering depends on the live
+   * camera pose, but the mobile buttons are DOM. They publish intent here and
+   * `TreeTraversal` consumes it — the same cross-boundary pattern the rest of the scene
+   * uses. `nonce` exists so that pressing the same button twice fires twice; without it
+   * an identical (axis, direction) pair would be indistinguishable from no new request.
+   */
+  navRequest: NavRequest | null;
   quality: Quality;
   /**
    * Freezes `quality` against `PerformanceMonitor`, which otherwise re-tiers on its own
@@ -58,6 +107,11 @@ export interface SceneStore {
   openInspector: (id: string) => void;
   closeInspector: () => void;
   setReducedMotion: (value: boolean) => void;
+  setInteractionMode: (mode: InteractionMode) => void;
+  /** Ask for one traversal step. Consumed inside the Canvas; see `navRequest`. */
+  requestNav: (axis: NavAxis, direction: 1 | -1) => void;
+  /** Called by the consumer once a request has been acted on. */
+  clearNavRequest: () => void;
   setQuality: (quality: Quality) => void;
   setQualityPinned: (value: boolean) => void;
   setCoarsePointer: (value: boolean) => void;
@@ -142,6 +196,8 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   hoveredNodeId: null,
   inspectorNodeId: null,
   reducedMotion,
+  interactionMode: 'sections',
+  navRequest: null,
   quality: seedQuality(),
   qualityPinned: false,
   isCoarsePointer: isCoarsePointer(),
@@ -175,6 +231,10 @@ export const useSceneStore = create<SceneStore>((set, get) => ({
   closeInspector: () => set({ inspectorNodeId: null }),
   setReducedMotion: (value) =>
     set(value ? { reducedMotion: true, transitionMode: 'off' } : { reducedMotion: false }),
+  setInteractionMode: (mode) => set({ interactionMode: mode }),
+  requestNav: (axis, direction) =>
+    set({ navRequest: { axis, direction, nonce: nextNavNonce() } }),
+  clearNavRequest: () => set({ navRequest: null }),
   setQuality: (quality) => set({ quality }),
   setQualityPinned: (value) => set({ qualityPinned: value }),
   setCoarsePointer: (value) => set({ isCoarsePointer: value }),

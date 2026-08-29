@@ -5,7 +5,10 @@ import { SceneCanvas } from './scene/SceneCanvas.tsx';
 import { FocusTrack } from './navigation/FocusTrack.tsx';
 import { DotNav } from './navigation/DotNav.tsx';
 import { SettingsCluster } from './navigation/SettingsCluster.tsx';
+import { NavButtons } from './navigation/NavButtons.tsx';
+import { ExploreToggle } from './navigation/ExploreToggle.tsx';
 import { CodeInspectorPanel } from './inspector/CodeInspectorPanel.tsx';
+import { useSceneStore } from './store/sceneStore.ts';
 
 import { Hero } from './sections/Hero.tsx';
 import { About } from './sections/About.tsx';
@@ -30,6 +33,8 @@ import './styles/global.css';
  * what keeps them crawlable (§5.3, §10).
  */
 export function App(): ReactNode {
+  const exploring = useSceneStore((s) => s.interactionMode === 'explore');
+
   return (
     <ThemeProvider>
       <a className="skip-link" href="#content">
@@ -38,7 +43,18 @@ export function App(): ReactNode {
 
       <SceneCanvas />
 
-      <main id="content">
+      {/*
+        Explore mode hides the content layer so the visitor can actually see what they
+        are flying through — the fixed track covers most of the viewport, and navigating
+        behind a wall of text is pointless.
+
+        `hidden` rather than unmounting, for two reasons. The sections must stay in the
+        DOM to remain crawlable (§5.3, §10), and unmounting would discard scroll
+        positions and in-progress state for the sake of a mode most visitors will leave
+        within seconds. `hidden` also removes the subtree from the accessibility tree and
+        from hit-testing, so it cannot swallow pointer events aimed at the scene.
+      */}
+      <main id="content" hidden={exploring}>
         <FocusTrack>
           {[
             <Hero key="hero" />,
@@ -50,8 +66,14 @@ export function App(): ReactNode {
         </FocusTrack>
       </main>
 
-      <DotNav />
+      {/* The carousel dots address sections that are not on screen while exploring. */}
+      {exploring ? null : <DotNav />}
       <SettingsCluster />
+
+      {/* Touch equivalents for the two wheel gestures (§8.2). */}
+      <NavButtons />
+      <ExploreToggle />
+
       <CodeInspectorPanel />
     </ThemeProvider>
   );

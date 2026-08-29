@@ -44,18 +44,47 @@ export const astNodeSchema = z.object({
 
 export type AstNode = z.infer<typeof astNodeSchema>;
 
+/**
+ * A resolved import between two of this project's own files.
+ *
+ * Keyed by FILE PATH rather than by node index, unlike `astEdgeSchema` below. Node
+ * indices churn through the runtime depth filter and quality cap, and while file roots
+ * always survive those, relying on that is a trap waiting for the first person who
+ * changes the ranking rule. There are only tens of these, so a string pair is cheap.
+ *
+ * Bare specifiers ('three', 'react') resolve to nothing and are dropped at generation:
+ * this is a map of THIS codebase, not of node_modules.
+ */
+export const moduleEdgeSchema = z.object({
+  /** Path of the importing file, matching an entry in `files`. */
+  from: z.string().min(1),
+  /** Path of the imported file. */
+  to: z.string().min(1),
+  /** How many separate import statements connect the pair. */
+  count: z.number().int().positive(),
+});
+
+export type ModuleEdge = z.infer<typeof moduleEdgeSchema>;
+
 /** Parent -> child index pairs, pre-flattened for a single LineSegments buffer (§4.4). */
 export const astEdgeSchema = z.tuple([z.number().int(), z.number().int()]);
 export type AstEdge = z.infer<typeof astEdgeSchema>;
 
 export const astGraphSchema = z.object({
-  /** Schema version — bump when the node shape changes so stale JSON fails loudly. */
-  version: z.literal(1),
+  /**
+   * Schema version — bump when the node shape changes so stale JSON fails loudly.
+   *
+   * 2 added `moduleEdges`. A cached v1 artifact now fails validation at load rather than
+   * rendering a scene whose import layer is silently missing.
+   */
+  version: z.literal(2),
   generatedAt: z.string(),
   /** Source files that contributed nodes, in stable order. */
   files: z.array(z.string()),
   nodes: z.array(astNodeSchema),
   edges: z.array(astEdgeSchema),
+  /** File-to-file imports, resolved at build time (§4.2). */
+  moduleEdges: z.array(moduleEdgeSchema),
   stats: z.object({
     totalParsed: z.number().int().nonnegative(),
     rendered: z.number().int().nonnegative(),

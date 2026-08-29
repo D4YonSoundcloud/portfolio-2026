@@ -138,6 +138,9 @@
   --scene-rim-strength: 3;
   /* How far non-active nodes fade while something is hovered or selected. */
   --scene-dim: 0.7;
+
+
+  --scene-module-edge: #5eead4;
 }
 
 /* ── Light ──────────────────────────────────────────────────────────────────────────
@@ -190,6 +193,10 @@
   --scene-env-high: #ffffff;
   --scene-rim-strength: 0.8;
   --scene-dim: 0.78;
+
+  /* Darker and more saturated: on paper the arc is ink, not light, and the dark theme's
+   * value would disappear against a pale ground. */
+   --scene-module-edge: #0f766e;
 }
 
 /* §8.1 — the scrim goes slightly stronger on mobile, where there's less margin between

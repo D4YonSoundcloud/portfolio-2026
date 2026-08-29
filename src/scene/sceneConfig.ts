@@ -76,6 +76,14 @@ export interface ThemedValues {
     ringOpacity: number;
     shellOpacity: number;
   };
+  moduleEdges: {
+    /** Resting opacity of an import arc. */
+    opacity: number;
+    /** Opacity once the arc touches the hovered or inspected node's file. */
+    focusOpacity: number;
+    /** How much brighter the travelling pulse is than the arc it runs along. */
+    pulseGain: number;
+  };
 }
 
 /** Values that are identical in both themes. */
@@ -168,6 +176,23 @@ export interface SharedValues {
     keyPower: number;
     keyGain: number;
   };
+  /**
+   * File-to-file import arcs (scene/ModuleEdges.tsx). Structure only — colour comes from
+   * the `--scene-module-edge` token.
+   */
+  moduleEdges: {
+    /** Bulge of the arc as a fraction of the straight-line distance between file roots. */
+    arcHeight: number;
+    /** Tessellation per arc. The only value here that rebuilds geometry rather than
+     * writing a uniform, since it changes the vertex count. */
+    segments: number;
+    /** How much of each end dissolves into the file root, 0 to 0.5. */
+    endFade: number;
+    /** Arc lengths travelled per second by the pulse. */
+    pulseSpeed: number;
+    /** Length of the pulse as a fraction of the arc. */
+    pulseLength: number;
+  };
   lod: {
     /** §4.5 — deeper nodes fade in only when the camera is near that cluster. */
     near: number;
@@ -223,6 +248,7 @@ export const SCENE_DEFAULTS: SceneConfig = {
       // two theme blocks stay structurally identical and the panel never shows a gap.
       vignette: { offset: 0.35, darkness: 0.28 },
       selection: { ringOpacity: 0.85, shellOpacity: 0.5 },
+      moduleEdges: { opacity: 0.14, focusOpacity: 0.75, pulseGain: 2.2 },
     },
     light: {
       lights: { ambientIntensity: 1.15, keyIntensity: 0.5 },
@@ -238,6 +264,7 @@ export const SCENE_DEFAULTS: SceneConfig = {
       bloom: { intensity: 0.32, threshold: 0.1, smoothing: 0.9 },
       vignette: { offset: 0, darkness: 1.0 },
       selection: { ringOpacity: 0.7, shellOpacity: 0.42 },
+      moduleEdges: { opacity: 0.3, focusOpacity: 0.85, pulseGain: 1.1 },
     },
   },
   shared: {
@@ -283,6 +310,15 @@ export const SCENE_DEFAULTS: SceneConfig = {
       keyAzimuth: -19,
       keyPower: 1,
       keyGain: 0,
+    },
+    moduleEdges: {
+      arcHeight: 0.28,
+      // 24 is smooth at this arc height; the cost is trivial because there are tens of
+      // arcs, not thousands.
+      segments: 24,
+      endFade: 0.12,
+      pulseSpeed: 0.06,
+      pulseLength: 0.16,
     },
     lod: { near: 46, far: 92, shallowDepth: 2, intervalMs: 120 },
     interaction: { hoverAttack: 0.14, selectAttack: 0.22, dimAttack: 0.18 },
